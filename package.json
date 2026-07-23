@@ -1,0 +1,72 @@
+{
+  "name": "lexiflow",
+  "version": "0.1.0",
+  "description": "本地优先的 Windows 桌面翻译与编程命名工具",
+  "main": "dist-electron/main/index.js",
+  "author": "LexiFlow",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "node scripts/vue-typecheck.cjs --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "build": "npm run typecheck && vite build && npm run verify:build",
+    "verify:build": "node scripts/verify-build.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "npm run build && playwright test",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:win:portable": "npm run build && electron-builder --win portable"
+  },
+  "dependencies": {
+    "vue": "^3.5.40",
+    "vue-router": "^5.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@typescript/typescript6": "^6.0.2",
+    "@types/node": "^24.13.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/tsconfig": "^0.9.1",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "playwright": "^1.61.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vite-plugin-electron": "^1.1.0",
+    "vitest": "^4.1.10",
+    "vue-tsc": "^3.3.8"
+  },
+  "build": {
+    "appId": "com.lexiflow.translator",
+    "productName": "LexiFlow",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "LexiFlow-${version}-${arch}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LexiFlow"
+    },
+    "portable": {
+      "artifactName": "LexiFlow-${version}-${arch}-Portable.${ext}"
+    }
+  }
+}
