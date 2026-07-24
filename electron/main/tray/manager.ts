@@ -1,7 +1,18 @@
-import { app, Menu, nativeImage, Tray } from "electron";
+import { Menu, nativeImage, Tray } from "electron";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ShortcutSettings } from "../../shared/types";
 
-const TRAY_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAWUlEQVR42mNgQAX/Gf4z/Gf4zwAEdCUDCYZ/DP8Z/jP8Z/jP8J/hP8N/hv8M/xn+M/xn+A8UQjDMYHgAxTCA4T8jAwPDfyYGBgaG/wwMDAwM/xkYGBj+MwAA1QwfcaafvxUAAAAASUVORK5CYII=";
+const moduleDirectory = dirname(fileURLToPath(import.meta.url));
+
+function createTrayIcon() {
+  const iconPath = join(moduleDirectory, "../../build/icon.ico");
+  const icon = nativeImage.createFromPath(iconPath);
+  if (icon.isEmpty()) {
+    throw new Error(`Tray icon is empty: ${iconPath}`);
+  }
+  return icon;
+}
 
 interface TrayActions {
   openMain: () => void;
@@ -19,8 +30,7 @@ export class TrayManager {
 
   create(shortcuts: ShortcutSettings): void {
     if (!this.tray) {
-      const icon = nativeImage.createFromDataURL(TRAY_ICON);
-      this.tray = new Tray(icon);
+      this.tray = new Tray(createTrayIcon());
       this.tray.setToolTip("LexiFlow 桌面翻译");
       this.tray.on("double-click", this.actions.openMain);
     }

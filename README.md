@@ -43,6 +43,8 @@ Windows NSIS 安装包输出到 `release/`。若只需要免安装程序：
 npm run dist:win:portable
 ```
 
+打包脚本默认使用 npmmirror 加速 Electron 二进制下载；下载仍失败时见 [故障排查](docs/troubleshooting.md)。
+
 如本机已运行 Ollama，可执行包含真实模型请求的端到端验证：
 
 ```powershell

@@ -56,7 +56,8 @@ export class WindowManager {
       minWidth: 900,
       minHeight: 620,
       show: false,
-      title: "LexiFlow"
+      title: "LexiFlow",
+      icon: join(moduleDirectory, "../../build/icon.ico")
     });
     this.mainWindow = window;
     window.once("ready-to-show", () => window.show());

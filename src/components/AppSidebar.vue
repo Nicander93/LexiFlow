@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppIcon from "./AppIcon.vue";
+import logoUrl from "../assets/logo.png";
 
 const navigation = [
   { to: "/", label: "翻译", hint: "Translate", icon: "translate" as const },
@@ -13,7 +14,7 @@ const navigation = [
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark">L</span>
+      <img class="brand-mark" :src="logoUrl" alt="LexiFlow" width="44" height="44" />
       <div><strong>LexiFlow</strong><small>安静地读懂每一句</small></div>
     </div>
     <nav aria-label="主导航">

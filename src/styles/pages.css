@@ -65,7 +65,7 @@
 .about-hero { position: relative; overflow: hidden; padding: 46px; border-radius: 30px; }
 .about-hero::after { position: absolute; width: 300px; height: 300px; right: -90px; top: -130px; border-radius: 50%; background: radial-gradient(circle, rgba(87,162,255,.18), transparent 68%); content: ""; }
 .about-top { display: flex; gap: 22px; align-items: center; position: relative; z-index: 1; }
-.about-logo { width: 70px; height: 70px; border-radius: 22px; font-size: 32px; }
+.about-logo { width: 70px; height: 70px; border-radius: 22px; }
 .about-top h2 { margin: 0 0 6px; font-size: 24px; letter-spacing: -.035em; }
 .about-top p { max-width: 520px; margin: 0; color: var(--muted); line-height: 1.6; }
 .about-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 30px; }
