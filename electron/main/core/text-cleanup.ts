@@ -5,6 +5,7 @@ export interface TextCleanupOptions {
 
 const MARKDOWN_STRUCTURE = /^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s)/;
 
+/** Placeholder fenced code with private-use markers so line joining cannot split blocks. 用私用区字符占位，避免合并折行拆掉代码块。 */
 function protectCodeBlocks(text: string): { text: string; restore: (value: string) => string } {
   const blocks: string[] = [];
   const protectedText = text.replace(/```[\s\S]*?```/g, (block) => {
@@ -18,6 +19,7 @@ function protectCodeBlocks(text: string): { text: string; restore: (value: strin
   };
 }
 
+/** PDF/web copies often wrap one paragraph across lines; keep headings/lists/blank lines, join the rest. PDF/网页复制常拆行；标题列表和空行保留，其余拼回段落。 */
 function joinWrappedLines(lines: string[]): string[] {
   const output: string[] = [];
   let paragraph = "";
@@ -52,7 +54,7 @@ function joinWrappedLines(lines: string[]): string[] {
   return output;
 }
 
-/** Normalizes copied text while keeping paragraphs, Markdown structure and fenced code intact. */
+/** Normalizes copied text while keeping paragraphs, Markdown structure and fenced code intact. 规范化粘贴文本；可关折行合并，或保护代码块后再还原。 */
 export function cleanInputText(text: string, options: TextCleanupOptions): string {
   const normalized = text.replace(/\r\n?/g, "\n").replace(/[\u200B\u200C\u200D\uFEFF]/g, "").replace(/\u3000/g, " ");
   const protectedValue = options.protectCodeBlocks ? protectCodeBlocks(normalized) : { text: normalized, restore: (value: string) => value };

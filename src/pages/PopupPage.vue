@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useTranslation } from "../composables/useTranslation";
+import { useDictionary } from "../composables/useDictionary";
 import type { NamingResult, TranslationMode, TranslationProfile } from "../../electron/shared/types";
+import { shouldLookupDictionary } from "../../electron/shared/dictionary-eligibility";
 import { getTranslatorApi } from "../platform/translator";
 import SegmentedText from "../components/SegmentedText.vue";
+import DictionaryCompactCard from "../components/dictionary/DictionaryCompactCard.vue";
+
+type PopupView = "dictionary" | "normal" | "technical" | "naming";
 
 const mode = ref<TranslationMode>("technical");
+const popupView = ref<PopupView>("technical");
 const sourceText = ref("");
 const captureError = ref("");
 const capturing = ref(false);
@@ -15,9 +21,11 @@ const profileId = ref("general");
 const copied = ref(false);
 const sourceExpanded = ref(true);
 const translator = getTranslatorApi();
-const { status, resultText, result, errorMessage, isRunning, start, stop, retry } = useTranslation();
+const { status, resultText, result, errorMessage, isRunning, start, stop, retry, reset } = useTranslation();
+const { status: dictionaryStatus, result: dictionaryResult, lookupImmediate, reset: resetDictionary } = useDictionary(0);
 const hoveredSegmentId = ref<string>();
 const lockedSegmentId = ref<string>();
+let payloadSequence = 0;
 
 const namingResult = computed<NamingResult | null>(() => {
   if (mode.value !== "naming" || status.value !== "success") return null;
@@ -26,6 +34,7 @@ const namingResult = computed<NamingResult | null>(() => {
 const displayResult = computed(() => namingResult.value?.recommended ?? resultText.value);
 const activeSegmentId = computed(() => lockedSegmentId.value ?? hoveredSegmentId.value);
 const hasStructuredResult = computed(() => status.value === "success" && Boolean(result.value?.segments.length));
+const showDictionaryTab = computed(() => dictionaryStatus.value === "found" && Boolean(dictionaryResult.value?.entry));
 
 async function run(): Promise<void> {
   if (!sourceText.value.trim()) return;
@@ -40,6 +49,41 @@ async function run(): Promise<void> {
       : undefined,
     profileId: profileId.value
   });
+}
+
+async function selectView(view: PopupView): Promise<void> {
+  popupView.value = view;
+  if (view === "dictionary") return;
+  mode.value = view;
+  await run();
+}
+
+async function triggerAiTranslate(): Promise<void> {
+  popupView.value = mode.value === "naming" ? "naming" : mode.value;
+  await run();
+}
+
+async function handlePayloadText(text: string, preferredMode: TranslationMode, sequence: number): Promise<void> {
+  sourceText.value = text;
+  if (!shouldLookupDictionary(text)) {
+    resetDictionary();
+    popupView.value = preferredMode;
+    mode.value = preferredMode;
+    await run();
+    return;
+  }
+
+  await lookupImmediate(text);
+  if (sequence !== payloadSequence) return;
+
+  if (dictionaryStatus.value === "found" && dictionaryResult.value?.entry) {
+    popupView.value = "dictionary";
+    return;
+  }
+
+  popupView.value = preferredMode;
+  mode.value = preferredMode;
+  await run();
 }
 
 async function copy(text = displayResult.value): Promise<void> {
@@ -66,14 +110,20 @@ onMounted(() => {
   document.addEventListener("keydown", handleKeydown);
   void translator.profiles.list().then((items) => { profiles.value = items; }).catch(() => undefined);
   removePayloadListener = translator.window.onPopupPayload((payload) => {
+    const sequence = ++payloadSequence;
     stop();
+    reset();
+    resetDictionary();
+    copied.value = false;
     mode.value = payload.mode;
+    popupView.value = payload.mode;
     capturing.value = Boolean(payload.capturing);
     captureError.value = payload.error ?? "";
+    hoveredSegmentId.value = undefined;
+    lockedSegmentId.value = undefined;
     if (payload.text) {
-      sourceText.value = payload.text;
       capturing.value = false;
-      void run();
+      void handlePayloadText(payload.text, payload.mode, sequence);
     }
   });
 });
@@ -84,9 +134,10 @@ onUnmounted(() => { document.removeEventListener("keydown", handleKeydown); remo
   <div class="popup-shell">
     <header class="popup-header drag-region">
       <div class="popup-tabs no-drag">
-        <button :class="{ active: mode === 'normal' }" @click="mode = 'normal'; run()">翻译</button>
-        <button :class="{ active: mode === 'technical' }" @click="mode = 'technical'; run()">技术</button>
-        <button :class="{ active: mode === 'naming' }" @click="mode = 'naming'; run()">命名</button>
+        <button v-if="showDictionaryTab" :class="{ active: popupView === 'dictionary' }" @click="selectView('dictionary')">词典</button>
+        <button :class="{ active: popupView === 'normal' }" @click="selectView('normal')">翻译</button>
+        <button :class="{ active: popupView === 'technical' }" @click="selectView('technical')">技术</button>
+        <button :class="{ active: popupView === 'naming' }" @click="selectView('naming')">命名</button>
       </div>
       <label class="popup-profile no-drag">Profile<select v-model="profileId" @change="run"><option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option></select></label>
       <div class="popup-window-actions no-drag"><button :title="pinned ? '取消固定' : '固定窗口'" @click="togglePin">{{ pinned ? '●' : '○' }}</button><button title="关闭 (Esc)" @click="close">×</button></div>
@@ -109,7 +160,12 @@ onUnmounted(() => { document.removeEventListener("keydown", handleKeydown); remo
         <pre v-else-if="sourceExpanded">{{ sourceText }}</pre>
       </section>
       <section class="popup-result">
-        <div v-if="status === 'loading'" class="popup-state"><span class="spinner" />正在等待模型响应…</div>
+        <DictionaryCompactCard
+          v-if="popupView === 'dictionary' && dictionaryResult?.entry"
+          :entry="dictionaryResult.entry"
+          @ai-translate="triggerAiTranslate"
+        />
+        <div v-else-if="status === 'loading'" class="popup-state"><span class="spinner" />正在等待模型响应…</div>
         <div v-else-if="status === 'error'" class="popup-error">{{ errorMessage }}</div>
         <div v-else-if="namingResult" class="popup-candidates"><button v-for="candidate in namingResult.candidates" :key="candidate.name" @click="copy(candidate.name)"><code>{{ candidate.name }}</code><small>{{ candidate.meaning }}</small></button></div>
         <SegmentedText
@@ -122,12 +178,19 @@ onUnmounted(() => { document.removeEventListener("keydown", handleKeydown); remo
           @clear="clearSegmentLock"
           @navigate="navigateSegment"
         />
-        <pre v-else>{{ resultText }}<span v-if="status === 'streaming'" class="stream-cursor" /></pre>
+        <pre v-else>{{ displayResult }}</pre>
       </section>
     </template>
     <footer class="popup-footer">
-      <span class="popup-status">{{ copied ? '已复制' : status === 'success' ? '处理完成' : status === 'streaming' ? '生成中' : '' }}</span>
-      <div><button v-if="isRunning" @click="stop">停止</button><button v-if="status === 'error'" @click="retry">重试</button><button :disabled="!sourceText" title="复制原文" @click="copy(sourceText)">原文</button><button :disabled="!sourceText || !displayResult" title="复制原文和译文" @click="copy(`原文：${sourceText}\n\n译文：${displayResult}`)">双语</button><button :disabled="!displayResult" title="复制译文" @click="copy()">译文</button><button @click="openMain">主窗口</button></div>
+      <span class="popup-status">{{ copied ? '已复制' : status === 'success' ? '处理完成' : status === 'streaming' ? '生成中' : showDictionaryTab && popupView === 'dictionary' ? '本地词典' : '' }}</span>
+      <div>
+        <button v-if="isRunning" @click="stop">停止</button>
+        <button v-if="status === 'error'" @click="retry">重试</button>
+        <button :disabled="!sourceText" title="复制原文" @click="copy(sourceText)">原文</button>
+        <button :disabled="!sourceText || !displayResult" title="复制原文和译文" @click="copy(`原文：${sourceText}\n\n译文：${displayResult}`)">双语</button>
+        <button :disabled="!displayResult" title="复制译文" @click="copy()">译文</button>
+        <button @click="openMain">主窗口</button>
+      </div>
     </footer>
   </div>
 </template>

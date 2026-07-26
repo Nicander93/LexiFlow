@@ -223,14 +223,62 @@ export interface ProviderHealth {
   message: string;
 }
 
-export interface DictionaryEntry {
-  query: string;
-  phonetic?: string;
+export type DictionaryMatchType =
+  | "exact"
+  | "normalized"
+  | "lemma"
+  | "fuzzy"
+  | "none";
+
+export interface DictionarySense {
   partOfSpeech?: string;
-  definitions: string[];
-  forms?: string[];
-  collocations?: string[];
-  source: "local";
+  translations: string[];
+  definitions?: string[];
+}
+
+export interface DictionaryForm {
+  code: string;
+  label: string;
+  value: string;
+}
+
+export interface DictionaryLabels {
+  exams: string[];
+  collinsStars?: number;
+  oxford3000: boolean;
+  bncRank?: number;
+  contemporaryRank?: number;
+}
+
+export interface DictionaryEntry {
+  headword: string;
+  phonetic?: string;
+  senses: DictionarySense[];
+  forms: DictionaryForm[];
+  labels: DictionaryLabels;
+}
+
+export interface DictionaryLookupRequest {
+  query: string;
+}
+
+export interface DictionaryLookupResult {
+  query: string;
+  normalizedQuery: string;
+  found: boolean;
+  matchType: DictionaryMatchType;
+  entry?: DictionaryEntry;
+  suggestions: string[];
+  unavailableReason?: string;
+}
+
+export interface DictionaryStatus {
+  available: boolean;
+  source: "ECDICT";
+  dictionaryVersion?: string;
+  schemaVersion?: number;
+  entryCount?: number;
+  message?: string;
 }
 
 export interface DictionaryContextRequest {
@@ -383,48 +431,78 @@ export interface ShortcutRegistrationResult {
 }
 
 export interface RuntimeInfo {
-  apiVersion: 1;
+  apiVersion: 2;
   electron: string;
   platform: string;
 }
 
-/** 主/渲染/preload 共用的 IPC 通道名；新增通道须同步 api.ts、preload、ipc/register。 */
+/**
+ * 主/渲染/preload 共用的 IPC 通道名。
+ * 新增通道须同步改：api.ts（契约）、preload（白名单）、ipc/register（handler）。
+ * 约定：*:start / *:cancel 成对；*:event 由主进程推给渲染进程。
+ */
 export const IPC_CHANNELS = {
+  // 运行时探测
   runtimePing: "runtime:ping",
+
+  // 设置读写（update 前主进程会 validateSettings）
   settingsGet: "settings:get",
   settingsUpdate: "settings:update",
+
+  // Provider 连通性与模型列表
   providerHealth: "provider:health",
   providerModels: "provider:models",
+
+  // 翻译流：start/cancel 请求，event 推进度与结果
   translationStart: "translation:start",
   translationCancel: "translation:cancel",
   translationEvent: "translation:event",
+
+  // 句段润色
   revisionStart: "revision:start",
   revisionCancel: "revision:cancel",
   revisionEvent: "revision:event",
+
+  // 句段备选译法
   alternativesStart: "alternatives:start",
   alternativesCancel: "alternatives:cancel",
   alternativesEvent: "alternatives:event",
+
+  // 划词取词
   selectionCapture: "selection:capture",
+
+  // 翻译历史
   historyList: "history:list",
   historySearch: "history:search",
   historyToggleFavorite: "history:toggle-favorite",
   historyDelete: "history:delete",
   historyClear: "history:clear",
+
+  // 词典：本地 ECDICT 查词 + 模型语境解释
   dictionaryLookup: "dictionary:lookup",
+  dictionaryStatus: "dictionary:status",
   dictionaryContextStart: "dictionary:context:start",
   dictionaryContextCancel: "dictionary:context:cancel",
   dictionaryContextEvent: "dictionary:context:event",
+
+  // 术语表 CRUD 与 CSV 导入导出
   glossaryList: "glossary:list",
   glossaryUpsert: "glossary:upsert",
   glossaryDelete: "glossary:delete",
   glossaryConflicts: "glossary:conflicts",
   glossaryImportCsv: "glossary:import-csv",
   glossaryExportCsv: "glossary:export-csv",
+
+  // 隐私清理与诊断导出（不含 API Key）
   privacyClearLocalData: "privacy:clear-local-data",
   diagnosticsExport: "diagnostics:export",
+
+  // 翻译 Profile
   profileList: "profile:list",
   profileUpsert: "profile:upsert",
   profileDelete: "profile:delete",
+
+  // 文档翻译任务
   documentList: "document:list",
   documentDelete: "document:delete",
   documentImport: "document:import",
@@ -433,12 +511,20 @@ export const IPC_CHANNELS = {
   documentPause: "document:pause",
   documentCancel: "document:cancel",
   documentEvent: "document:event",
+
+  // OCR 截屏取字
   ocrCapture: "ocr:capture",
   ocrListScreens: "ocr:list-screens",
   ocrCaptureRequested: "ocr:capture-requested",
+
+  // 系统快捷键注册结果回传
   shortcutRegister: "shortcut:register",
+
+  // 剪贴板与窗口
   clipboardWrite: "clipboard:write",
   windowOpenMain: "window:open-main",
+
+  // 划词弹窗：payload 主→渲染，close/pin 渲染→主
   popupPayload: "popup:payload",
   popupClose: "popup:close",
   popupPin: "popup:pin"

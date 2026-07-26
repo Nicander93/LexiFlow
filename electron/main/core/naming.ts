@@ -1,6 +1,7 @@
 import type { NamingResult } from "../../shared/types";
 import { validateNamingResponse } from "./structured";
 
+/** Maps structured validation failures to user-facing Chinese errors. 把校验失败映射成可直接展示的中文错误。 */
 export function parseNamingResult(content: string): NamingResult {
   const parsed = validateNamingResponse(content);
   if (!parsed.ok) {

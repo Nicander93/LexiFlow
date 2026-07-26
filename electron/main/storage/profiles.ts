@@ -1,6 +1,6 @@
 /**
  * Profile 存储：内置项不可删；缺省 allowRemote 视为 true，兼容旧数据。
- * 远程禁发判定见 core/profile-policy.resolveModelAccess，不在本文件拦截。
+ * 远程禁发判定见 core/model-access-gate.resolveModelAccess，不在本文件拦截。
  */
 import { app } from "electron";
 import { join } from "node:path";

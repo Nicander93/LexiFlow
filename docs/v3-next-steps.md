@@ -13,7 +13,7 @@
 - 文档任务单并发队列，失败分块可单独重试；`document-tasks.json` / `profiles.json` 带 schemaVersion。
 - OCR 第一阶段限制：选屏 + 预览框选，支持编辑与重新识别；临时 PNG 用后即删。
 - 候选译法确认规则：默认 3 个标签（推荐译法 / 直译 / 正式表达）。
-- 渲染层曾因 `quality.ts` 中 `URL` 正则遮蔽全局 `URL` 导致白屏，已改名为 `URL_PATTERN`。
+- 渲染层曾因 `quality.ts` 中 `URL` 正则盖住全局 `URL` 导致白屏，已改名为 `URL_PATTERN`。
 
 ## 验证状态（2026-07-24）
 

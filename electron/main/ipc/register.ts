@@ -1,6 +1,6 @@
 /**
  * 主进程 IPC 总入口：通道名以 shared/types IPC_CHANNELS 为准，与 preload / api.ts 一一对应。
- * 设置写入前走 validateSettings；模型类请求只转发到 TranslationManager / DocumentManager，不在此绕过门禁。
+ * 设置写入前走 validateSettings；模型类请求只转发到 TranslationManager / DocumentManager，不在此绕过访问校验。
  */
 import { app, clipboard, dialog, ipcMain } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
@@ -10,7 +10,7 @@ import { buildDiagnosticReport } from "../core/diagnostics";
 import { validateSettings } from "../core/settings-validation";
 import { createProvider } from "../provider";
 import type { HistoryStore } from "../storage/history";
-import type { DictionaryService } from "../storage/dictionary";
+import type { DictionaryService } from "../dictionary/dictionary-service";
 import type { GlossaryStore } from "../storage/glossary";
 import { exportGlossaryCsv, parseGlossaryCsv } from "../storage/glossary";
 import type { ProfileStore } from "../storage/profiles";
@@ -24,6 +24,7 @@ import {
   IPC_CHANNELS,
   type AppSettings,
   type DictionaryContextRequest,
+  type DictionaryLookupRequest,
   type SegmentRevisionRequest,
   type SegmentAlternativeRequest,
   type TranslationRequest
@@ -48,7 +49,7 @@ export function registerIpcHandlers(dependencies: IpcDependencies): void {
   const { settingsStore, historyStore, dictionaryService, glossaryStore, profileStore, documentStore, documentManager, ocrService, translationManager, windowManager } = dependencies;
 
   ipcMain.handle(IPC_CHANNELS.runtimePing, () => ({
-    apiVersion: 1 as const,
+    apiVersion: 2 as const,
     electron: process.versions.electron,
     platform: process.platform
   }));
@@ -84,7 +85,30 @@ export function registerIpcHandlers(dependencies: IpcDependencies): void {
   ipcMain.handle(IPC_CHANNELS.historyToggleFavorite, (_event, id: string) => historyStore.toggleFavorite(id));
   ipcMain.handle(IPC_CHANNELS.historyDelete, (_event, id: string) => historyStore.delete(id));
   ipcMain.handle(IPC_CHANNELS.historyClear, () => historyStore.clear());
-  ipcMain.handle(IPC_CHANNELS.dictionaryLookup, (_event, term: string) => dictionaryService.lookup(term));
+  ipcMain.handle(IPC_CHANNELS.dictionaryLookup, (_event, request: DictionaryLookupRequest) => {
+    if (!request || typeof request !== "object" || typeof request.query !== "string") {
+      return {
+        query: "",
+        normalizedQuery: "",
+        found: false,
+        matchType: "none" as const,
+        suggestions: [],
+        unavailableReason: "无效的词典查询请求。"
+      };
+    }
+    if (request.query.length > 256) {
+      return {
+        query: request.query.slice(0, 256),
+        normalizedQuery: "",
+        found: false,
+        matchType: "none" as const,
+        suggestions: [],
+        unavailableReason: "查询过长。"
+      };
+    }
+    return dictionaryService.lookup(request);
+  });
+  ipcMain.handle(IPC_CHANNELS.dictionaryStatus, () => dictionaryService.getStatus());
   ipcMain.handle(IPC_CHANNELS.dictionaryContextStart, (event, request: DictionaryContextRequest) => translationManager.explainDictionary(event.sender, request));
   ipcMain.on(IPC_CHANNELS.dictionaryContextCancel, (_event, requestId?: string) => translationManager.cancel(requestId));
   ipcMain.handle(IPC_CHANNELS.glossaryList, () => glossaryStore.list());

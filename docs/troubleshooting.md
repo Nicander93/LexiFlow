@@ -47,3 +47,16 @@ pnpm dist:win:portable
 ```
 
 超时后建议清掉不完整缓存再重试：删除 `%LOCALAPPDATA%\electron\Cache` 与 `%LOCALAPPDATA%\electron-builder\Cache` 中对应版本目录。
+
+## 本地词典不可用
+
+界面提示“本地词典资源不可用”时：
+
+1. 确认安装包 / 开发目录中存在 `resources/dictionaries/ecdict-core.db`（打包后位于 `resources/dictionaries/`）。
+2. 开发模式不要依赖当前工作目录相对路径；主进程通过 `app.getAppPath()` / `process.resourcesPath` 定位。
+3. 词库损坏不影响翻译：可继续使用 AI 翻译；修复后重启应用即可。
+4. 自行重建：
+
+```bash
+python scripts/dictionary/build_ecdict.py --input /path/to/stardict.db --output resources/dictionaries/ecdict-core.db
+```

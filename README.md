@@ -21,7 +21,7 @@ LexiFlow 是面向 Windows 的本地优先桌面翻译工具，支持划词快�
 ### V2 / V3（在基础之上）
 
 - 稳定句段切分、局部重译、候选译法（推荐 / 直译 / 正式）
-- 术语表、翻译 Profile（含禁止远程）、选词词典与上下文解释
+- 术语表、翻译 Profile（含禁止远程）、本地 ECDICT 词典（单词优先，AI 按需）与上下文解释
 - Windows OCR（选屏 + 预览框选，临时图用后即删）
 - 轻量文档翻译（TXT / Markdown / SRT / 文本 PDF / 代码预览），单并发队列
 - 远程 Provider 需用户确认；一键清除本地数据；脱敏诊断导出
@@ -63,6 +63,13 @@ pnpm dist:win:portable
 $env:LEXIFLOW_E2E_MODEL="qwen3.5:9b"
 pnpm exec playwright test
 ```
+
+## 本地词典
+
+- 词库来自 ECDICT 精简 SQLite（`resources/dictionaries/ecdict-core.db`），随安装包 `extraResources` 分发。
+- 重建：`python scripts/dictionary/build_ecdict.py --input /path/to/ecdict.csv|stardict.db --output resources/dictionaries/ecdict-core.db`
+- 主窗口输入英文单词/短语会自动查词；悬浮窗命中词典时默认不调用模型。
+- 详见 `resources/dictionaries/NOTICE.md`。
 
 ## 构建边界
 

@@ -6,7 +6,9 @@ import type {
   AppSettings,
   DictionaryContextEvent,
   DictionaryContextRequest,
-  DictionaryEntry,
+  DictionaryLookupRequest,
+  DictionaryLookupResult,
+  DictionaryStatus,
   GlossaryConflict,
   GlossaryEntry,
   GlossaryExportResult,
@@ -74,7 +76,8 @@ export interface TranslatorApi {
     clear: () => Promise<void>;
   };
   dictionary: {
-    lookup: (term: string) => Promise<DictionaryEntry | undefined>;
+    lookup: (request: DictionaryLookupRequest) => Promise<DictionaryLookupResult>;
+    status: () => Promise<DictionaryStatus>;
     context: {
       start: (request: DictionaryContextRequest) => Promise<string>;
       cancel: (requestId?: string) => void;

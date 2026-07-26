@@ -6,7 +6,9 @@ import { contextBridge, ipcRenderer } from "electron";
 import {
   IPC_CHANNELS,
   type AppSettings,
-  type DictionaryEntry,
+  type DictionaryLookupRequest,
+  type DictionaryLookupResult,
+  type DictionaryStatus,
   type DocumentTaskRecord,
   type DocumentTaskEvent,
   type OcrResult,
@@ -82,7 +84,9 @@ const api = {
     clear: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.historyClear)
   },
   dictionary: {
-    lookup: (term: string): Promise<DictionaryEntry | undefined> => ipcRenderer.invoke(IPC_CHANNELS.dictionaryLookup, term),
+    lookup: (request: DictionaryLookupRequest): Promise<DictionaryLookupResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.dictionaryLookup, request),
+    status: (): Promise<DictionaryStatus> => ipcRenderer.invoke(IPC_CHANNELS.dictionaryStatus),
     context: {
       start: (request) => ipcRenderer.invoke(IPC_CHANNELS.dictionaryContextStart, request),
       cancel: (requestId?: string) => ipcRenderer.send(IPC_CHANNELS.dictionaryContextCancel, requestId),

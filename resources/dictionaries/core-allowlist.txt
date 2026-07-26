@@ -1,0 +1,29 @@
+# LexiFlow core dictionary allowlist
+# One headword per line. Used when a technical term would otherwise be filtered out.
+
+async
+await
+buffer
+callback
+class
+community service
+database
+debug
+dependency
+endpoint
+framework
+GeoJSON
+interface
+JSON
+long time
+long-time
+middleware
+namespace
+nullable
+OAuth
+repository
+runtime
+schema
+serialization
+stream
+TypeScript

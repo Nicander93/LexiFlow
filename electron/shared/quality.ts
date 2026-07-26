@@ -1,6 +1,6 @@
 /**
- * 句段质量启发式（主进程 / 渲染共用）：数字、单位、URL、代码块遗漏，重复译文，语言漂移，术语未应用。
- * URL_PATTERN 不可命名为 URL，会遮蔽全局 URL 构造器导致渲染白屏。
+ * 句段质量检查（主进程 / 渲染共用）：数字、单位、URL、代码块遗漏，重复译文，语言漂移，术语未应用。
+ * URL_PATTERN 不可命名为 URL，否则会盖住全局 URL 构造器导致渲染白屏。
  */
 import type { GlossaryMatchValidation, TranslationQualityIssue, TranslationSegment } from "./types";
 

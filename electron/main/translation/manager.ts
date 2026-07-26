@@ -1,6 +1,6 @@
 /**
  * 交互翻译编排：清理 → 切段 → resolveModelAccess → 流式 Provider → 结构化校验/一次修复 → 结果与历史。
- * 同一时刻只保留一个 activeRequest；新请求会取消旧请求，并通过 ModelRequestGate 抢占文档分块。
+ * 同一时刻只保留一个 activeRequest；新请求会取消旧请求，并通过 ModelConcurrencyGate 抢占文档分块。
  * 局部重译 / 候选 / 词典上下文共用本 Manager，事件用各自 requestId 过滤。
  */
 import { randomUUID } from "node:crypto";
@@ -8,8 +8,8 @@ import type { WebContents } from "electron";
 import { detectLanguage, resolveTargetLanguage } from "../core/language";
 import { mapProviderError } from "../core/errors";
 import { cleanInputText } from "../core/text-cleanup";
-import { modelRequestGate } from "../core/model-request-gate";
-import { resolveModelAccess } from "../core/profile-policy";
+import { modelConcurrencyGate } from "../core/model-concurrency-gate";
+import { resolveModelAccess } from "../core/model-access-gate";
 import {
   buildStructuredRepairPrompt,
   recordStructuredParseFailure,
@@ -81,14 +81,14 @@ export class TranslationManager {
     this.cancel();
     const controller = new AbortController();
     this.activeRequest = { id, controller };
-    modelRequestGate.beginInteractive();
+    modelConcurrencyGate.beginInteractive();
     return controller;
   }
 
   private endInteractive(requestId: string): void {
     if (this.activeRequest?.id === requestId) {
       this.activeRequest = null;
-      modelRequestGate.endInteractive();
+      modelConcurrencyGate.endInteractive();
     }
   }
 
@@ -388,6 +388,6 @@ export class TranslationManager {
     if (requestId && this.activeRequest.id !== requestId) return;
     this.activeRequest.controller.abort();
     this.activeRequest = null;
-    modelRequestGate.endInteractive();
+    modelConcurrencyGate.endInteractive();
   }
 }

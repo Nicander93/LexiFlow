@@ -15,8 +15,8 @@
 | 层 | 能力 | 关键代码 |
 | --- | --- | --- |
 | v0.1 | 划词、托盘、悬浮窗、Ollama/OpenAI、流式取消、历史与设置 | `clipboard/` `hotkey/` `window/` `tray/` `provider/` `translation/manager`（基础路径） |
-| V2 | 文本清理、稳定句段、结构化译文、词典、历史 schema 迁移 | `core/text-cleanup` `translation/segments` `translation/result` `core/structured` `storage/dictionary` `storage/history-policy` |
-| V3 | Profile / 术语表 / OCR / 文档队列 / 模型门禁 / 隐私清除 / 诊断 | `core/profile-policy` `core/model-request-gate` `storage/glossary` `storage/profiles` `ocr/` `document/` `core/diagnostics` |
+| V2 | 文本清理、稳定句段、结构化译文、词典、历史 schema 迁移 | `core/text-cleanup` `translation/segments` `translation/result` `core/structured` `dictionary/*` `storage/history-policy` |
+| V3 | Profile / 术语表 / OCR / 文档队列 / 模型访问校验 / 隐私清除 / 诊断 | `core/model-access-gate` `core/model-concurrency-gate` `storage/glossary` `storage/profiles` `ocr/` `document/` `core/diagnostics` |
 
 当前 Prompt 版本：`PROMPT_VERSION = "v3.1"`（`electron/shared/defaults.ts`）。改 prompt 规则或结构化 schema 时同步 bump。
 
@@ -50,23 +50,23 @@ index.ts（单实例 / E2E userData）
 | --- | --- | --- |
 | P0 | `bootstrap/application.ts` | 装配顺序、退出清理、`clear-on-exit`、托盘不退出 |
 | P0 | `ipc/register.ts` | 通道是否都接到正确 Manager；有无绕过校验的写入 |
-| P0 | `translation/manager.ts` | `requestId` 取消、门禁、结构化修复、历史写入 |
-| P0 | `document/manager.ts` | 单队列、暂停/取消、失败分块重试、与交互门禁抢占 |
-| P0 | `core/profile-policy.ts` | `resolveModelAccess`：禁远程 / 远程确认 / 模型路由 |
+| P0 | `translation/manager.ts` | `requestId` 取消、访问校验、结构化修复、历史写入 |
+| P0 | `document/manager.ts` | 单队列、暂停/取消、失败分块重试、可被交互请求抢占 |
+| P0 | `core/model-access-gate.ts` | `resolveModelAccess`：禁远程 / 远程确认 / 模型路由 |
 | P1 | `core/structured.ts` | schema 校验、一次修复、匿名失败计数 |
-| P1 | `core/model-request-gate.ts` | 交互优先于文档 |
+| P1 | `core/model-concurrency-gate.ts` | 交互优先于文档 |
 | P1 | `ocr/windows-ocr.ts` | 临时 PNG 必删、非 win32 拒绝、不落盘原图 |
 | P1 | `shared/api.ts` + `preload/index.ts` | 白名单是否与 `IPC_CHANNELS` 一致 |
 | P1 | `storage/settings.ts` / `history-policy.ts` | 加密与 schema 迁移失败行为 |
 | P2 | `translation/segments.ts` / `document/chunking.ts` | 切分边界（URL/代码/括号等） |
-| P2 | `shared/quality.ts` | 启发式质量检查（渲染侧可复用） |
+| P2 | `shared/quality.ts` | 质量检查（渲染侧可复用） |
 
 ## 4. 翻译主路径（交互）
 
 1. 输入清理：`cleanInputText`
 2. 句段切分：`splitIntoSegments`（稳定 `segmentId`）
-3. 门禁：`resolveModelAccess(profile, settings, …)` —— 禁止自行绕过
-4. 并发：`modelRequestGate.beginInteractive()`；新请求 / 停止会 `cancel` 旧 `AbortController`
+3. 访问校验：`resolveModelAccess(profile, settings, …)` —— 禁止自行绕过
+4. 并发：`modelConcurrencyGate.beginInteractive()`；新请求 / 停止会 `cancel` 旧 `AbortController`
 5. Provider 流式输出；句段模式要求按本地 ID 回 JSON
 6. `validateSegmentResponse`；失败则 `chat` 一次修复；再失败回退全文译文
 7. `createTranslationResult` → 可选写历史
@@ -98,7 +98,7 @@ OCR（第一阶段）：
 | 文件 | schemaVersion | 备注 |
 | --- | --- | --- |
 | `settings.json` | — | API Key 不在此明文；走 safeStorage |
-| `history.json` | 1 | 旧数组 / `targetText` → `items[].resultText`；迁移写失败不阻断启动 |
+| `history.json` | 1 | 旧数组 / `targetText` → `items[].resultText`；迁移写失败不妨碍启动 |
 | `profiles.json` | 1 | 缺省 `allowRemote` 视为允许 |
 | `glossary` 相关 JSON | — | CRUD + CSV；按源/目标语言筛选命中 |
 | `dictionary-cache.json` | — | 缓存写失败不影响查询结果 |
@@ -116,7 +116,7 @@ OCR（第一阶段）：
 ## 8. 测试对照
 
 ```bash
-pnpm test          # 门禁、结构化、文档任务、诊断脱敏等
+pnpm test          # 访问校验、结构化、文档任务、诊断脱敏等
 pnpm build         # typecheck + vite + verify-build 契约
 pnpm test:e2e      # Windows 上建议带 GPU 降级参数（已写入配置）
 ```
@@ -128,11 +128,11 @@ pnpm test:e2e      # Windows 上建议带 GPU 降级参数（已写入配置）
 
 | 测试 | 覆盖 |
 | --- | --- |
-| `profile-policy` / `model-routing` / `model-request-gate` | 门禁与抢占 |
+| `model-access-gate` / `model-routing` / `model-concurrency-gate` | 访问校验与抢占 |
 | `structured` / `translation-result` / `alternatives` | 解析与回退 |
 | `document-chunking` / `document-task` | 分块与状态机 |
 | `history-policy` / `dictionary` / `glossary` | 存储与迁移 |
-| `diagnostics` / `quality` / `text-cleanup` | 脱敏与启发式 |
+| `diagnostics` / `quality` / `text-cleanup` | 脱敏与质量检查 |
 
 ## 9. 常见漏改点
 

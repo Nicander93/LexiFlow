@@ -1,5 +1,6 @@
 import type { AppSettings } from "../../shared/types";
 
+/** Collect every settings error so the settings page can show them at once; empty means ok. 返回全部错误，通过则空数组。 */
 export function validateSettings(settings: AppSettings): string[] {
   const errors: string[] = [];
   try {

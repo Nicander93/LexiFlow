@@ -49,6 +49,16 @@ export function useTranslation() {
     currentRequestId.value = undefined;
   }
 
+  function reset(): void {
+    stop();
+    currentRequestId.value = undefined;
+    resultText.value = "";
+    result.value = undefined;
+    errorMessage.value = "";
+    status.value = "idle";
+    lastRequest = undefined;
+  }
+
   async function retry(): Promise<void> {
     if (lastRequest) await start(lastRequest);
   }
@@ -60,5 +70,5 @@ export function useTranslation() {
     removeListener();
   });
 
-  return { status, resultText, result, errorMessage, isRunning, start, stop, retry };
+  return { status, resultText, result, errorMessage, isRunning, start, stop, retry, reset };
 }

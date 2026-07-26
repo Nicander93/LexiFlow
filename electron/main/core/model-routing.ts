@@ -7,7 +7,10 @@ export interface ModelRoute {
   reason: "profile" | "default" | "short-text" | "document";
 }
 
-/** Resolves an explicitly configured local/remote Provider model without changing Provider type or endpoint. */
+/**
+ * Resolves an explicitly configured local/remote Provider model without changing Provider type or endpoint.
+ * 只换 model 字段；优先级：Profile 指定 > 文档模型 > 短文本模型 > 默认。
+ */
 export function resolveModelRoute(settings: AppSettings, task: ModelRouteTask, textLength: number, profileModel?: string): ModelRoute {
   if (profileModel?.trim()) return { model: profileModel.trim(), reason: "profile" };
   if (!settings.routing.enabled) return { model: settings.provider.model, reason: "default" };

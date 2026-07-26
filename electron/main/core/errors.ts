@@ -1,5 +1,7 @@
+/** Message is already user-facing; mapProviderError passes it through. 消息已是可读文案，会原样透传。 */
 export class UserFacingError extends Error {}
 
+/** Map provider/network failures to settings-oriented Chinese hints; unknown → generic failure. Provider/网络异常转中文提示。 */
 export function mapProviderError(error: unknown): string {
   if (error instanceof UserFacingError) return error.message;
   if (error instanceof DOMException && error.name === "AbortError") return "请求已取消。";

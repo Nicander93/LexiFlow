@@ -1,6 +1,7 @@
 /**
- * 组装翻译 / 重译 / 候选 / 词典上下文的 system+user prompt。
- * 句段模式要求模型按本地 segmentId 回 JSON；候选固定 3 标签（推荐译法 / 直译 / 正式表达）。
+ * Builds system+user prompts for translation / revision / alternatives / dictionary.
+ * 组装翻译 / 重译 / 候选 / 词典的 system+user。
+ * 句段模式要求按本地 segmentId 回 JSON；候选固定三个标签。
  * 改规则时同步 structured schema、UI，并 bump PROMPT_VERSION。
  */
 import { resolveTargetLanguage } from "./language";
@@ -15,6 +16,7 @@ export interface PromptMessages {
   targetLanguage: "zh-CN" | "en";
 }
 
+/** Segment mode forces JSON aligned to local IDs; naming uses its own prompt and throws if namingOptions is missing. 有 segments 时强制 JSON 对齐；命名缺 namingOptions 直接抛。 */
 export function buildPrompt(
   request: TranslationRequest,
   settings: AppSettings,
@@ -47,6 +49,7 @@ export function buildPrompt(
   };
 }
 
+/** Plain-text revision only, so the result can be written back into the segment. 只要纯文本新译文，方便直接写回句段。 */
 export function buildRevisionPrompt(request: SegmentRevisionRequest, settings: AppSettings): PromptMessages {
   const targetLanguage = resolveTargetLanguage(request.segment.source, request.targetLanguage);
   return {
@@ -56,6 +59,7 @@ export function buildRevisionPrompt(request: SegmentRevisionRequest, settings: A
   };
 }
 
+/** Labels must be 推荐译法 / 直译 / 正式表达 — kept in sync with validateAlternativesResponse. */
 export function buildAlternativesPrompt(request: SegmentAlternativeRequest, settings: AppSettings): PromptMessages {
   const targetLanguage = resolveTargetLanguage(request.segment.source, request.targetLanguage);
   return {
@@ -65,6 +69,7 @@ export function buildAlternativesPrompt(request: SegmentAlternativeRequest, sett
   };
 }
 
+/** Explain the term in this segment only; do not restate the whole sentence. 只解释当前句段里的含义，避免复述整句。 */
 export function buildDictionaryContextPrompt(request: DictionaryContextRequest, settings: AppSettings): PromptMessages {
   const targetLanguage = resolveTargetLanguage(request.source, request.targetLanguage);
   return {

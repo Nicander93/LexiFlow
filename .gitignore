@@ -11,3 +11,7 @@ coverage/
 test-results/
 playwright-report/
 package-lock.json
+
+__pycache__/
+*.pyc
+

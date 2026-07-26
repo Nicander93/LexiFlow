@@ -31,7 +31,7 @@ export type StructuredParseResult = SegmentsParseOk | AlternativesParseOk | Nami
 
 const ALT_LABELS = ["推荐译法", "直译", "正式表达"] as const;
 
-/** Anonymous local counters only — never store user text or keys. */
+/** Anonymous local counters only — never store user text or keys. 只记匿名计数。 */
 const parseFailureCounts: Record<string, number> = {};
 
 export function recordStructuredParseFailure(kind: StructuredKind, reason: StructuredParseFailure["reason"]): void {
@@ -59,6 +59,10 @@ function parseJson(content: string): { ok: true; value: unknown } | { ok: false;
   }
 }
 
+/**
+ * Segment ids must match local sourceSegments exactly (no extras, missing, or renames).
+ * id 必须与本地一一对应；通过后按原文顺序拼 targetText 并算 targetStart/targetEnd。
+ */
 export function validateSegmentResponse(content: string, sourceSegments: SourceSegment[]): SegmentsParseOk | StructuredParseFailure {
   const parsed = parseJson(content);
   if (!parsed.ok) return { ok: false, kind: "segments", reason: parsed.reason };
@@ -90,6 +94,7 @@ export function validateSegmentResponse(content: string, sourceSegments: SourceS
   return { ok: true, kind: "segments", segments, targetText: segments.map((segment) => segment.target).join("\n") };
 }
 
+/** Exactly one of each fixed label; ids come from createId, never from the model. 三个标签各一次；id 由调用方生成。 */
 export function validateAlternativesResponse(content: string, createId: () => string): AlternativesParseOk | StructuredParseFailure {
   const parsed = parseJson(content);
   if (!parsed.ok) return { ok: false, kind: "alternatives", reason: parsed.reason };
@@ -139,7 +144,7 @@ const SCHEMA_HINTS: Record<StructuredKind, string> = {
   naming: '合法 JSON：{"recommended":"...","candidates":[{"name":"...","meaning":"..."}]}。'
 };
 
-/** Repair prompt sends only the raw model output + schema — never the original user text again. */
+/** Repair prompt sends only the raw model output + schema — never the original user text again. 修复时不回附用户原文，减少二次泄露。 */
 export function buildStructuredRepairPrompt(kind: StructuredKind, rawResponse: string): { system: string; user: string } {
   return {
     system: `你只负责把上一次模型输出修正为符合 schema 的 JSON。不要解释，不要 Markdown。${SCHEMA_HINTS[kind]}`,

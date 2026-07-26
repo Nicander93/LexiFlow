@@ -14,7 +14,7 @@ export interface DiagnosticReport {
   notes: string[];
 }
 
-/** Redacted diagnostics only — never include source/target text, documents, or API keys. */
+/** Redacted diagnostics only — never include source/target text, documents, or API keys. 只收集环境与匿名计数。 */
 export function buildDiagnosticReport(appVersion: string): DiagnosticReport {
   return {
     schemaVersion: 1,

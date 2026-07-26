@@ -219,7 +219,7 @@ onMounted(async () => {
         <p v-if="settings.provider.type === 'openai-compatible'" class="privacy-warning">当前 Provider 为远程服务。启用路由不会切换服务地址，但所选模型仍会收到对应任务内容。</p>
       </SettingsSection>
 
-      <SettingsSection icon="settings" title="隐私与本地数据" description="可一次清除本地历史、词典缓存、术语表、Profile、文档任务和设置">
+      <SettingsSection icon="settings" title="隐私与本地数据" description="可一次清除本地历史、术语表、Profile、文档任务和设置">
         <div v-if="showClearDataConfirm" class="confirm-strip"><span>确定清除所有本地数据并恢复默认设置吗？此操作无法撤销。API Key 不会写入日志或诊断导出。</span><div><button class="text-button" @click="showClearDataConfirm = false">取消</button><button class="secondary-button danger" @click="clearLocalData">确认清除</button></div></div>
         <div v-else class="form-actions"><button class="text-button" @click="exportDiagnostics">导出诊断信息</button><button class="secondary-button danger" @click="showClearDataConfirm = true">清除所有本地数据</button></div>
       </SettingsSection>

@@ -59,6 +59,17 @@
     "asarUnpack": [
       "**/*.node"
     ],
+    "extraResources": [
+      {
+        "from": "resources/dictionaries",
+        "to": "dictionaries",
+        "filter": [
+          "ecdict-core.db",
+          "manifest.json",
+          "NOTICE.md"
+        ]
+      }
+    ],
     "win": {
       "icon": "build/icon.ico",
       "target": [

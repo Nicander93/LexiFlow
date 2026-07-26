@@ -11,6 +11,8 @@
 .source-toggle { width: 100%; display: flex; justify-content: space-between; padding: 9px 13px; border: 0; color: var(--muted); background: transparent; font-size: 10px; }
 .popup-source pre { padding: 0 13px 12px; font-family: inherit; font-size: 11px; line-height: 1.5; }
 .popup-result { flex: 1; min-height: 0; overflow: auto; }
+.dictionary-compact-card { height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 8px; padding: 12px; }
+.dictionary-compact-scroll { min-height: 0; overflow: auto; display: grid; gap: 8px; align-content: start; }
 .popup-result > pre { padding: 15px; font-family: inherit; line-height: 1.65; font-size: 12px; }
 .popup-state { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: 12px; }
 .popup-manual { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 14px; }

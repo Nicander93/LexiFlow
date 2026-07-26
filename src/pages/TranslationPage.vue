@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import PageHeader from "../components/PageHeader.vue";
 import ResultPanel from "../components/ResultPanel.vue";
 import SegmentedText from "../components/SegmentedText.vue";
 import AppIcon from "../components/AppIcon.vue";
+import DictionaryCard from "../components/dictionary/DictionaryCard.vue";
 import { useTranslation } from "../composables/useTranslation";
-import type { DictionaryEntry, OcrResult, OcrScreen, SegmentAlternative, SegmentRevision, TargetLanguage, TranslationMode, TranslationProfile, TranslationQualityIssue, TranslationSegment } from "../../electron/shared/types";
+import { useDictionary } from "../composables/useDictionary";
+import type { DictionaryLookupResult, OcrResult, OcrScreen, SegmentAlternative, SegmentRevision, TargetLanguage, TranslationMode, TranslationProfile, TranslationQualityIssue, TranslationSegment } from "../../electron/shared/types";
+import { shouldLookupDictionary } from "../../electron/shared/dictionary-eligibility";
 import { getTranslatorApi } from "../platform/translator";
 import { checkTranslationQuality } from "../../electron/shared/quality";
+
+type ResultView = "dictionary" | "translation";
 
 const sourceText = ref("");
 const mode = ref<TranslationMode>("normal");
@@ -18,11 +23,14 @@ const maxInputLength = ref(10_000);
 const providerLabel = ref("本地模型");
 const profiles = ref<TranslationProfile[]>([]);
 const profileId = ref("general");
-const { status, resultText, result, errorMessage, isRunning, start, stop, retry } = useTranslation();
+const { status, resultText, result, errorMessage, isRunning, start, stop, retry, reset } = useTranslation();
+const { status: dictionaryStatus, result: autoDictionaryResult, lookup: lookupAutoDictionary, reset: resetAutoDictionary } = useDictionary(220);
+const resultView = ref<ResultView>("translation");
+const lastTranslatedSource = ref("");
 const hoveredSegmentId = ref<string>();
 const lockedSegmentId = ref<string>();
 const sourceEditorVisible = ref(true);
-const dictionaryEntry = ref<DictionaryEntry>();
+const segmentDictionary = ref<DictionaryLookupResult | null>(null);
 const dictionaryTerm = ref("");
 const dictionaryLoading = ref(false);
 const dictionaryError = ref("");
@@ -63,6 +71,26 @@ const displayResultText = computed(() => displaySegments.value.length ? displayS
 const activeSegment = computed(() => displaySegments.value.find((segment) => segment.id === activeSegmentId.value));
 const dictionaryContext = computed(() => displaySegments.value.find((segment) => segment.id === dictionarySegmentId.value));
 const glossaryValidation = computed(() => result.value?.glossaryValidation ?? []);
+const showDictionaryPane = computed(() => dictionaryStatus.value === "found" && Boolean(autoDictionaryResult.value?.entry));
+const primaryActionLabel = computed(() => (showDictionaryPane.value ? "AI 翻译" : "开始翻译"));
+
+watch(sourceText, (value) => {
+  if (lastTranslatedSource.value && value !== lastTranslatedSource.value) {
+    reset();
+    lastTranslatedSource.value = "";
+  }
+  if (!shouldLookupDictionary(value)) {
+    resetAutoDictionary();
+    if (resultView.value === "dictionary") resultView.value = "translation";
+    return;
+  }
+  lookupAutoDictionary(value);
+});
+
+watch(dictionaryStatus, (value) => {
+  if (value === "found") resultView.value = "dictionary";
+  else if (resultView.value === "dictionary") resultView.value = "translation";
+});
 
 async function translate(): Promise<void> {
   sourceEditorVisible.value = false;
@@ -70,7 +98,25 @@ async function translate(): Promise<void> {
   lockedSegmentId.value = undefined;
   revisions.value = [];
   alternatives.value = [];
+  resultView.value = "translation";
+  lastTranslatedSource.value = sourceText.value;
   await start({ text: sourceText.value, mode: mode.value, targetLanguage: targetLanguage.value, profileId: profileId.value });
+}
+
+async function triggerAiTranslate(): Promise<void> {
+  resultView.value = "translation";
+  if (lastTranslatedSource.value === sourceText.value && (status.value === "success" || status.value === "streaming" || status.value === "loading")) {
+    return;
+  }
+  await translate();
+}
+
+async function switchResultView(view: ResultView): Promise<void> {
+  if (view === "translation") {
+    await triggerAiTranslate();
+    return;
+  }
+  resultView.value = "dictionary";
 }
 async function reviseSegment(instruction: string): Promise<void> {
   const segment = activeSegment.value;
@@ -209,7 +255,7 @@ function clearSegmentLock(): void {
 function closeDictionary(): void {
   translator.dictionary.context.cancel(dictionaryContextRequestId.value);
   dictionaryTerm.value = "";
-  dictionaryEntry.value = undefined;
+  segmentDictionary.value = null;
   dictionaryError.value = "";
   dictionarySegmentId.value = undefined;
   dictionaryContextText.value = "";
@@ -230,7 +276,7 @@ async function lookupDictionary(term: string, segmentId?: string): Promise<void>
   translator.dictionary.context.cancel(dictionaryContextRequestId.value);
   dictionaryTerm.value = term;
   dictionarySegmentId.value = segmentId;
-  dictionaryEntry.value = undefined;
+  segmentDictionary.value = null;
   dictionaryError.value = "";
   dictionaryContextText.value = "";
   dictionaryContextError.value = "";
@@ -242,15 +288,17 @@ async function lookupDictionary(term: string, segmentId?: string): Promise<void>
   }
   dictionaryLoading.value = true;
   try {
-    dictionaryEntry.value = await translator.dictionary.lookup(term);
+    const lookup = await translator.dictionary.lookup({ query: term });
+    segmentDictionary.value = lookup;
+    const firstSense = lookup.entry?.senses[0]?.translations[0] ?? "";
     glossaryFromDictionary.value = {
       sourceTerm: term,
-      targetTerm: dictionaryEntry.value?.definitions[0]?.split(/[；;，,]/)[0]?.trim() ?? ""
+      targetTerm: firstSense.split(/[；;，,]/)[0]?.trim() ?? ""
     };
     glossaryFromDictionaryNotice.value = "";
     const profile = profiles.value.find((candidate) => candidate.id === profileId.value);
     const context = dictionaryContext.value;
-    if (dictionaryEntry.value && context && profile?.dictionaryMode === "contextual") {
+    if (lookup.found && context && profile?.dictionaryMode === "contextual") {
       dictionaryContextLoading.value = true;
       dictionaryContextRequestId.value = await translator.dictionary.context.start({
         term,
@@ -409,26 +457,49 @@ onUnmounted(() => {
           @select-term="lookupDictionary"
         />
         <textarea v-else v-model="sourceText" autofocus placeholder="输入或粘贴文本，Ctrl + Enter 执行" @keydown.ctrl.enter.prevent="translate" />
-        <div class="input-footer"><span>{{ sourceText.length.toLocaleString() }} / {{ maxInputLength.toLocaleString() }}</span><button class="primary-button" :disabled="isRunning" @click="translate">开始翻译</button></div>
+        <div class="input-footer"><span>{{ sourceText.length.toLocaleString() }} / {{ maxInputLength.toLocaleString() }}</span><button class="primary-button" :disabled="isRunning" @click="triggerAiTranslate">{{ primaryActionLabel }}</button></div>
       </section>
-      <ResultPanel
-        :status="status"
-        :text="displayResultText"
-        :source-text="sourceText"
-        :error="errorMessage"
-        :segments="displaySegments"
-        :active-segment-id="activeSegmentId"
-        @copy="copyResult"
-        @copy-source="copySource"
-        @copy-bilingual="copyBilingual"
-        @stop="stop"
-        @retry="retry"
-        @hover="handleSegmentHover"
-        @toggle="toggleSegment"
-        @clear="clearSegmentLock"
-        @navigate="navigateSegment"
-        @select-term="lookupDictionary"
-      />
+      <section v-if="showDictionaryPane && resultView === 'dictionary'" class="result-panel surface dictionary-result-panel">
+        <div class="panel-toolbar result-view-tabs">
+          <div class="segmented">
+            <button class="active" @click="switchResultView('dictionary')">词典</button>
+            <button @click="switchResultView('translation')">AI 翻译</button>
+          </div>
+        </div>
+        <DictionaryCard
+          v-if="autoDictionaryResult?.entry"
+          :entry="autoDictionaryResult.entry"
+          @ai-translate="triggerAiTranslate"
+        />
+      </section>
+      <template v-else>
+        <div v-if="showDictionaryPane" class="result-view-tabs-floating">
+          <div class="segmented">
+            <button @click="switchResultView('dictionary')">词典</button>
+            <button class="active" @click="switchResultView('translation')">AI 翻译</button>
+          </div>
+        </div>
+        <p v-if="dictionaryStatus === 'not-found' && shouldLookupDictionary(sourceText)" class="dictionary-hint muted">本地词典未收录，将使用模型翻译。</p>
+        <p v-else-if="dictionaryStatus === 'unavailable'" class="dictionary-hint muted">{{ autoDictionaryResult?.unavailableReason || '本地词典资源不可用，仍可使用 AI 翻译。' }}</p>
+        <ResultPanel
+          :status="status"
+          :text="displayResultText"
+          :source-text="sourceText"
+          :error="errorMessage"
+          :segments="displaySegments"
+          :active-segment-id="activeSegmentId"
+          @copy="copyResult"
+          @copy-source="copySource"
+          @copy-bilingual="copyBilingual"
+          @stop="stop"
+          @retry="retry"
+          @hover="handleSegmentHover"
+          @toggle="toggleSegment"
+          @clear="clearSegmentLock"
+          @navigate="navigateSegment"
+          @select-term="lookupDictionary"
+        />
+      </template>
     </div>
     <section v-if="qualityIssues.length" class="quality-card surface"><div class="panel-toolbar"><span>质量检查</span><button class="text-button" @click="qualityIssues = []">关闭</button></div><ul><li v-for="issue in qualityIssues" :key="`${issue.segmentId}-${issue.kind}`">{{ issue.message }}</li></ul></section>
     <section v-if="glossaryValidation.length" class="quality-card surface"><div class="panel-toolbar"><span>术语校验</span><small>{{ glossaryValidation.filter((item) => item.applied).length }} / {{ glossaryValidation.length }} 已按术语表使用</small></div><ul><li v-for="item in glossaryValidation" :key="item.sourceTerm" :class="item.applied ? 'glossary-valid' : 'glossary-invalid'">{{ item.applied ? '✓' : '!' }} {{ item.sourceTerm }} → {{ item.targetTerm }}{{ item.applied ? '' : '（译文中未检测到）' }}</li></ul></section>
@@ -443,15 +514,10 @@ onUnmounted(() => {
     <section v-if="dictionaryTerm" ref="dictionaryCard" class="dictionary-card surface" aria-live="polite">
       <div class="panel-toolbar"><span>词典 · {{ dictionaryTerm }}</span><button class="text-button" @click="closeDictionary">关闭</button></div>
       <div v-if="dictionaryLoading" class="state-message muted"><span class="spinner" />正在查询本地词典</div>
-      <div v-else-if="dictionaryEntry" class="dictionary-content">
-        <strong>{{ dictionaryEntry.query }}</strong>
-        <span v-if="dictionaryEntry.phonetic">{{ dictionaryEntry.phonetic }}</span>
-        <small v-if="dictionaryEntry.partOfSpeech">{{ dictionaryEntry.partOfSpeech }}</small>
-        <ul><li v-for="definition in dictionaryEntry.definitions" :key="definition">{{ definition }}</li></ul>
-        <p v-if="dictionaryEntry.forms?.length">词形：{{ dictionaryEntry.forms.join(' · ') }}</p>
-        <p v-if="dictionaryEntry.collocations?.length">搭配：{{ dictionaryEntry.collocations.join(' · ') }}</p>
+      <div v-else-if="segmentDictionary?.entry" class="dictionary-content">
+        <DictionaryCard :entry="segmentDictionary.entry" @ai-translate="triggerAiTranslate" />
         <div v-if="dictionaryContext" class="dictionary-context"><small>当前双语上下文</small><p>{{ dictionaryContext.source }}</p><p>{{ dictionaryContext.target }}</p></div>
-        <div v-if="dictionaryContextLoading || dictionaryContextText || dictionaryContextError" class="dictionary-context"><small>模型上下文解释</small><p v-if="dictionaryContextLoading" class="muted">正在补充当前语境的释义…</p><p v-else-if="dictionaryContextText">{{ dictionaryContextText }}</p><p v-else class="error-text">{{ dictionaryContextError }}</p></div>
+        <div v-if="dictionaryContextLoading || dictionaryContextText || dictionaryContextError" class="dictionary-context"><small>模型补充解释</small><p v-if="dictionaryContextLoading" class="muted">正在补充释义…</p><p v-else-if="dictionaryContextText">{{ dictionaryContextText }}</p><p v-else class="error-text">{{ dictionaryContextError }}</p></div>
         <div class="dictionary-glossary">
           <small>加入术语表前请确认源词与目标词（不要直接把整段释义当译文）</small>
           <div class="form-grid">
@@ -463,7 +529,7 @@ onUnmounted(() => {
         </div>
       </div>
       <div v-else-if="dictionaryError" class="state-message error-message">{{ dictionaryError }}</div>
-      <div v-else class="state-message muted">本地词典暂未收录该词或短语。</div>
+      <div v-else class="state-message muted">{{ segmentDictionary?.unavailableReason || '本地词典暂未收录该词或短语。' }}</div>
     </section>
   </div>
 </template>

@@ -1,6 +1,6 @@
 /**
  * 文档翻译：导入分块后进入单并发队列；每个分块同样经 resolveModelAccess。
- * 交互请求通过 ModelRequestGate 优先；暂停/取消会 abort 当前分块。失败分块写入 failedChunks 可重试。
+ * 交互请求通过 ModelConcurrencyGate 优先；暂停/取消会 abort 当前分块。失败分块写入 failedChunks 可重试。
  * PDF 仅提取已有文本层，扫描件需先走 OCR。
  */
 import { randomUUID } from "node:crypto";
@@ -17,8 +17,8 @@ import { GlossaryStore } from "../storage/glossary";
 import { createProvider } from "../provider";
 import { createTranslationResult } from "../translation/result";
 import { transitionDocumentTask } from "./task-state";
-import { resolveModelAccess } from "../core/profile-policy";
-import { modelRequestGate } from "../core/model-request-gate";
+import { resolveModelAccess } from "../core/model-access-gate";
+import { modelConcurrencyGate } from "../core/model-concurrency-gate";
 import { detectLanguage, resolveTargetLanguage } from "../core/language";
 import { PROMPT_VERSION } from "../../shared/defaults";
 
@@ -141,7 +141,7 @@ export class DocumentManager {
     this.active.set(taskId, controller);
     let held = false;
     try {
-      await modelRequestGate.acquireDocument(controller.signal);
+      await modelConcurrencyGate.acquireDocument(controller.signal);
       held = true;
       const profile = this.profiles.get(task.profileId);
       if (!profile) throw new Error("任务 Profile 不存在。");
@@ -151,7 +151,7 @@ export class DocumentManager {
       const failedChunks = { ...(task.failedChunks ?? {}) };
       for (const chunk of task.chunks) {
         if (controller.signal.aborted) return;
-        await modelRequestGate.yieldForInteractive(controller.signal);
+        await modelConcurrencyGate.yieldForInteractive(controller.signal);
         if (!chunk.translatable) continue;
         const needsWork = task.translations[chunk.id] === undefined || Boolean(failedChunks[chunk.id]);
         if (!needsWork) continue;
@@ -225,7 +225,7 @@ export class DocumentManager {
       }
     } finally {
       this.active.delete(taskId);
-      if (held) modelRequestGate.releaseDocument();
+      if (held) modelConcurrencyGate.releaseDocument();
     }
   }
 

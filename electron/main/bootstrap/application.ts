@@ -9,7 +9,7 @@ import { captureSelectedText } from "../clipboard/selection";
 import { HotkeyManager } from "../hotkey/manager";
 import { registerIpcHandlers } from "../ipc/register";
 import { HistoryStore } from "../storage/history";
-import { DictionaryService } from "../storage/dictionary";
+import { DictionaryService } from "../dictionary/dictionary-service";
 import { GlossaryStore } from "../storage/glossary";
 import { ProfileStore } from "../storage/profiles";
 import { DocumentStore } from "../storage/documents";
@@ -29,7 +29,8 @@ export async function bootstrapApplication(): Promise<void> {
   const glossaryStore = new GlossaryStore();
   const profileStore = new ProfileStore();
   const documentStore = new DocumentStore();
-  await Promise.all([settingsStore.initialize(), historyStore.initialize(), dictionaryService.initialize(), glossaryStore.initialize(), profileStore.initialize(), documentStore.initialize()]);
+  await Promise.all([settingsStore.initialize(), historyStore.initialize(), glossaryStore.initialize(), profileStore.initialize(), documentStore.initialize()]);
+  await dictionaryService.initialize().catch(() => undefined);
   await historyStore.prune(settingsStore.get().history);
 
   const windowManager = new WindowManager(
@@ -61,7 +62,7 @@ export async function bootstrapApplication(): Promise<void> {
   };
   const clearLocalData = async (): Promise<void> => {
     translationManager.cancel();
-    await Promise.all([historyStore.clear(), dictionaryService.clear(), glossaryStore.clear(), profileStore.clear(), documentStore.clear(), settingsStore.reset()]);
+    await Promise.all([historyStore.clear(), glossaryStore.clear(), profileStore.clear(), documentStore.clear(), settingsStore.reset()]);
     applySettings(settingsStore.get());
   };
 
@@ -111,6 +112,7 @@ export async function bootstrapApplication(): Promise<void> {
     }
     windowManager.setQuitting(true);
     translationManager.cancel();
+    dictionaryService.close();
     hotkeyManager.unregister();
     trayManager.destroy();
   });

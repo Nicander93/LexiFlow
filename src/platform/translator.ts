@@ -1,6 +1,7 @@
 import type { TranslatorApi } from "../../electron/shared/api";
 import { DEFAULT_SETTINGS } from "../../electron/shared/defaults";
-import type { DictionaryContextEvent, DictionaryEntry, DocumentTaskRecord, ProviderModel, SegmentAlternativeEvent, SegmentRevisionEvent, TranslationEvent, TranslationHistory } from "../../electron/shared/types";
+import type { DictionaryContextEvent, DocumentTaskRecord, ProviderModel, SegmentAlternativeEvent, SegmentRevisionEvent, TranslationEvent, TranslationHistory } from "../../electron/shared/types";
+import { previewDictionaryLookup } from "./dictionary-preview";
 
 export function getTranslatorApi(): TranslatorApi {
   if (!window.translator) {
@@ -40,7 +41,7 @@ export function installBrowserPreviewApi(): void {
   // visual review without masking a missing preload inside the real app.
   window.translator = {
     runtime: {
-      ping: async () => ({ apiVersion: 1, electron: "browser-preview", platform: "browser" })
+      ping: async () => ({ apiVersion: 2, electron: "browser-preview", platform: "browser" })
     },
     settings: {
       get: async () => structuredClone(settings),
@@ -132,14 +133,19 @@ export function installBrowserPreviewApi(): void {
       }
     },
     dictionary: {
-      lookup: async (term): Promise<DictionaryEntry | undefined> => term.trim().toLowerCase() === "translation"
-        ? { query: "translation", phonetic: "/trænzˈleɪʃn/", partOfSpeech: "noun", definitions: ["翻译；译文"], source: "local" }
-        : undefined,
+      lookup: async (request) => previewDictionaryLookup(request.query),
+      status: async () => ({
+        available: true,
+        source: "ECDICT",
+        dictionaryVersion: "preview",
+        schemaVersion: 1,
+        entryCount: 3
+      }),
       context: {
         start: async (request) => {
           const requestId = crypto.randomUUID();
           queueMicrotask(() => dictionaryContextListeners.forEach((listener) => listener({ requestId, status: "loading" })));
-          setTimeout(() => dictionaryContextListeners.forEach((listener) => listener({ requestId, status: "success", explanation: `“${request.term}”在此句中应结合整句语义理解。` })), 200);
+          setTimeout(() => dictionaryContextListeners.forEach((listener) => listener({ requestId, status: "success", explanation: `“${request.term}”可结合当前句段理解。` })), 200);
           return requestId;
         },
         cancel: () => undefined,

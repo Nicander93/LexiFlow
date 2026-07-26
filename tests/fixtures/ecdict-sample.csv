@@ -1,0 +1,21 @@
+word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange
+sorry,/ˈsɒri/,"feeling regret or sadness","a. 抱歉的；惭愧的；难过的
+int. 对不起；抱歉；没听清，请再讲一次
+[网络] 遗憾",adj.,3,1,zk gk cet4 cet6 ky,1200,800,r:sorrier/t:sorriest
+sorrier,,,a. 更抱歉的,,0,0,,,,
+go,/ɡəʊ/,"to move or travel",v. 去；走；离开,v.,5,1,zk gk cet4 cet6,50,40,p:went/d:gone/i:going/3:goes
+perceive,/pəˈsiːv/,"to notice or become aware",v. 察觉；感知；理解,v.,3,1,cet6 ky,9000,8500,p:perceived/d:perceived/i:perceiving/3:perceives
+tooth,/tuːθ/,"hard structure in the mouth",n. 牙齿,n.,4,1,zk gk cet4,2000,1500,s:teeth/0:tooth
+long-time,,,a. 长时间的；长期的,,0,0,cet4,10000,9000,
+long time,,,n. 长时间；长期,,0,0,cet4,10001,9001,
+community service,,,n. 社区服务；公益劳动,,0,0,cet6,20000,18000,
+buffer,/ˈbʌfə/,"temporary storage area","n. 缓冲区
+v. 缓冲",n.,2,0,,25000,22000,
+repository,/rɪˈpɒzɪtəri/,"a place where things are stored",n. 仓库；贮藏室；代码仓库,n.,1,0,,,,
+runtime,,,n. 运行时；运行期,,0,0,,,,
+schema,,,n. 模式；架构；纲要,,0,0,,,,
+serialization,,,n. 序列化,,0,0,,,,
+GeoJSON,,,n. 一种基于 JSON 的地理数据格式,,0,0,,,,
+TypeScript,,,n. JavaScript 的超集类型化语言,,0,0,,,,
+OAuth,,,n. 开放授权协议,,0,0,,,,
+don't,,,aux. do not 的缩写,,0,0,zk gk,,,
