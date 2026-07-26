@@ -9,18 +9,61 @@ const require = createRequire(import.meta.url);
 const packagedExecutable = process.env.LEXIFLOW_EXECUTABLE;
 const electronExecutable = packagedExecutable || require("electron") as string;
 
+/** Windows CI/desktop GPU stacks often crash Chromium; keep LEXIFLOW_E2E sandbox/HWACCEL off and force software path. */
+const E2E_GPU_ARGS = ["--disable-gpu", "--disable-software-rasterizer", "--in-process-gpu"];
+
+async function describeLaunchFailure(app: ElectronApplication): Promise<string> {
+  const windows = app.windows().map((page) => ({ url: page.url() }));
+  let stderr = "";
+  try {
+    // best-effort: process may already be gone
+    const child = app.process();
+    stderr = (child.stderr?.read()?.toString() ?? "").slice(-4_000);
+  } catch {
+    stderr = "";
+  }
+  return [
+    `windows=${JSON.stringify(windows)}`,
+    stderr ? `stderr_tail=${stderr}` : "stderr_tail=<empty>"
+  ].join("\n");
+}
+
 test.beforeAll(async () => {
+  const args = packagedExecutable ? [...E2E_GPU_ARGS] : [resolve("."), ...E2E_GPU_ARGS];
   electronApp = await electron.launch({
     executablePath: electronExecutable,
-    args: packagedExecutable ? [] : [resolve(".")],
+    args,
     env: { ...process.env, LEXIFLOW_E2E: "1" }
   });
 
-  await expect.poll(() => electronApp.windows().length).toBeGreaterThanOrEqual(2);
-  const window = electronApp.windows().find((page) => !page.url().includes("/popup"));
-  if (!window) throw new Error("LexiFlow main window was not created.");
+  electronApp.on("window", (page) => {
+    page.on("pageerror", (error) => console.error("[e2e renderer]", error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") console.error("[e2e console]", message.text());
+    });
+  });
+
+  try {
+    await expect
+      .poll(() => electronApp.windows().some((page) => page.url() && !page.url().includes("/popup")), {
+        timeout: 45_000,
+        message: "waiting for LexiFlow main window"
+      })
+      .toBe(true);
+  } catch (error) {
+    const detail = await describeLaunchFailure(electronApp);
+    throw new Error(`LexiFlow main window was not created.\n${detail}\nCause: ${error instanceof Error ? error.message : error}`);
+  }
+
+  const window = electronApp.windows().find((page) => page.url() && !page.url().includes("/popup"));
+  if (!window) {
+    const detail = await describeLaunchFailure(electronApp);
+    throw new Error(`LexiFlow main window was not created.\n${detail}`);
+  }
   mainWindow = window;
+  mainWindow.on("pageerror", (error) => console.error("[e2e main pageerror]", error.message));
   await mainWindow.waitForLoadState("domcontentloaded");
+  console.info("[e2e] main window url=", mainWindow.url());
 });
 
 test.afterAll(async () => {
@@ -32,10 +75,10 @@ test("preload contract and primary routes render", async () => {
     (window as Window & { translator?: TranslatorApi }).translator?.runtime.ping()
   );
   expect(runtime).toMatchObject({ apiVersion: 1, platform: "win32" });
-  await expect(mainWindow.getByRole("heading", { name: "让文字自然地抵达另一种语言" })).toBeVisible();
+  await expect(mainWindow.getByRole("heading", { name: "翻译" })).toBeVisible();
 
   await mainWindow.getByRole("link", { name: /设置/ }).click();
-  await expect(mainWindow.getByRole("heading", { name: "把 LexiFlow 调成顺手的样子" })).toBeVisible();
+  await expect(mainWindow.getByRole("heading", { name: "设置" })).toBeVisible();
   await expect(mainWindow.getByText("模型服务", { exact: true })).toBeVisible();
 });
 

@@ -18,6 +18,7 @@ interface TrayActions {
   openMain: () => void;
   quickTranslate: () => void;
   naming: () => void;
+  screenshot: () => void;
   openSettings: () => void;
   togglePaused: (paused: boolean) => void;
   quit: () => void;
@@ -44,6 +45,7 @@ export class TrayManager {
       { type: "separator" },
       { label: "快速翻译", accelerator: shortcuts.translation, click: this.actions.quickTranslate },
       { label: "编程命名", accelerator: shortcuts.naming, click: this.actions.naming },
+      { label: "截图 OCR", accelerator: shortcuts.screenshot, click: this.actions.screenshot },
       { label: "设置", click: this.actions.openSettings },
       { type: "separator" },
       {

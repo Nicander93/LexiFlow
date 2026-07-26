@@ -16,6 +16,7 @@ function mergeSettings(value?: Partial<StoredSettings>): StoredSettings {
     shortcuts: { ...DEFAULT_SETTINGS.shortcuts, ...value?.shortcuts },
     translation: { ...DEFAULT_SETTINGS.translation, ...value?.translation },
     history: { ...DEFAULT_SETTINGS.history, ...value?.history },
+    routing: { ...DEFAULT_SETTINGS.routing, ...value?.routing },
     window: { ...DEFAULT_SETTINGS.window, ...value?.window },
     startup: { ...DEFAULT_SETTINGS.startup, ...value?.startup }
   } as StoredSettings;
@@ -71,6 +72,13 @@ export class SettingsStore {
     }
     this.value = stored;
     await this.store.write(stored);
+    return this.getPublic();
+  }
+
+  async reset(): Promise<AppSettings> {
+    this.value = mergeSettings();
+    this.volatileApiKey = "";
+    await this.store.write(this.value);
     return this.getPublic();
   }
 }

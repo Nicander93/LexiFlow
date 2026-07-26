@@ -6,6 +6,7 @@ const navigation = [
   { to: "/", label: "翻译", hint: "Translate", icon: "translate" as const },
   { to: "/naming", label: "命名", hint: "Naming", icon: "sparkle" as const },
   { to: "/history", label: "历史", hint: "History", icon: "history" as const },
+  { to: "/documents", label: "文档", hint: "Documents", icon: "history" as const },
   { to: "/settings", label: "设置", hint: "Settings", icon: "settings" as const },
   { to: "/about", label: "关于", hint: "About", icon: "info" as const }
 ];

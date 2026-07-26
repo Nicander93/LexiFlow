@@ -5,6 +5,7 @@ import HistoryPage from "../pages/HistoryPage.vue";
 import SettingsPage from "../pages/SettingsPage.vue";
 import AboutPage from "../pages/AboutPage.vue";
 import PopupPage from "../pages/PopupPage.vue";
+import DocumentsPage from "../pages/DocumentsPage.vue";
 import NotFoundPage from "../pages/NotFoundPage.vue";
 
 const router = createRouter({
@@ -13,6 +14,7 @@ const router = createRouter({
     { path: "/", component: TranslationPage },
     { path: "/naming", component: NamingPage },
     { path: "/history", component: HistoryPage },
+    { path: "/documents", component: DocumentsPage },
     { path: "/settings", component: SettingsPage },
     { path: "/about", component: AboutPage },
     { path: "/popup", component: PopupPage, meta: { popup: true } },

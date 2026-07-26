@@ -1,5 +1,8 @@
 import type { AppSettings } from "./types";
 
+/** 与结构化输出 / 历史条目绑定；改 prompt 规则或 JSON schema 时递增。 */
+export const PROMPT_VERSION = "v3.1";
+
 export const DEFAULT_PROMPTS = {
   normal: `你是一个专业翻译工具。请将输入内容翻译为目标语言。
 要求：
@@ -27,26 +30,38 @@ export const DEFAULT_SETTINGS: AppSettings = {
   provider: {
     type: "ollama",
     baseUrl: "http://127.0.0.1:11434",
-    model: "qwen3:4b",
+    model: "qwen3.5:9b",
+    remoteUsageConfirmed: false,
     timeoutMs: 60_000,
     stream: true,
     keepAlive: "5m"
   },
   shortcuts: {
-    translation: "Alt+Space",
-    naming: "Alt+Shift+Space",
+    translation: "Ctrl+Alt+T",
+    naming: "Ctrl+Alt+N",
+    screenshot: "Ctrl+Alt+S",
     paused: false
   },
   translation: {
     targetLanguage: "auto",
     maxInputLength: 10_000,
+    autoCleanText: true,
+    preserveOriginalLineBreaks: false,
+    protectCodeBlocks: true,
     normalPrompt: DEFAULT_PROMPTS.normal,
     technicalPrompt: DEFAULT_PROMPTS.technical,
     namingPrompt: DEFAULT_PROMPTS.naming
   },
   history: {
     enabled: true,
-    maxItems: 100
+    maxItems: 100,
+    retention: "forever"
+  },
+  routing: {
+    enabled: false,
+    shortTextMaxLength: 240,
+    shortTextModel: "",
+    documentModel: ""
   },
   window: {
     closeAction: "hide",

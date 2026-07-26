@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS } from "../electron/shared/defaults";
 import { detectLanguage, resolveTargetLanguage } from "../electron/main/core/language";
 import { buildModelOptions } from "../electron/main/core/model-options";
 import { parseNamingResult } from "../electron/main/core/naming";
-import { buildPrompt } from "../electron/main/core/prompt";
+import { buildDictionaryContextPrompt, buildPrompt, buildRevisionPrompt } from "../electron/main/core/prompt";
 import { validateSettings } from "../electron/main/core/settings-validation";
 import { hasClipboardChanged, validateInput } from "../electron/main/core/validation";
 import { mapProviderError, UserFacingError } from "../electron/main/core/errors";
@@ -47,6 +47,26 @@ describe("提示词和模型参数", () => {
   it("构造低随机性和动态 token 参数", () => {
     expect(buildModelOptions(10)).toEqual({ temperature: 0.1, topP: 0.8, maxTokens: 512 });
     expect(buildModelOptions(10_000).maxTokens).toBe(8192);
+    expect(buildModelOptions(10, 0.35).temperature).toBe(0.35);
+    expect(buildModelOptions(10, 5).temperature).toBe(2);
+  });
+
+  it("局部重译只包含选中句段和明确要求", () => {
+    const prompt = buildRevisionPrompt({
+      segment: { id: "segment-2", source: "Keep this sentence.", target: "保留这句话。", sourceStart: 0, sourceEnd: 19 },
+      instruction: "更正式",
+      targetLanguage: "zh-CN"
+    }, DEFAULT_SETTINGS);
+    expect(prompt.user).toContain("Keep this sentence.");
+    expect(prompt.user).toContain("更正式");
+    expect(prompt.system).toContain("只返回新的完整译文");
+  });
+
+  it("词典上下文提示只发送选中词与所属双语句段", () => {
+    const prompt = buildDictionaryContextPrompt({ term: "model", source: "The model is ready.", target: "模型已就绪。", targetLanguage: "zh-CN" }, DEFAULT_SETTINGS);
+    expect(prompt.user).toContain("查询词：model");
+    expect(prompt.user).toContain("对应译文：模型已就绪。");
+    expect(prompt.system).toContain("上下文释义");
   });
 });
 
@@ -67,6 +87,7 @@ describe("设置和错误映射", () => {
     settings.provider.baseUrl = "file:///tmp/model";
     settings.provider.model = "";
     settings.shortcuts.naming = settings.shortcuts.translation;
+    settings.shortcuts.screenshot = settings.shortcuts.translation;
     settings.provider.timeoutMs = 50;
     expect(validateSettings(settings).length).toBeGreaterThanOrEqual(4);
   });

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { bootstrapApplication } from "./bootstrap/application";
 
 if (process.env.LEXIFLOW_E2E === "1") {
+  app.disableHardwareAcceleration();
   app.setPath("userData", join(app.getPath("temp"), `lexiflow-e2e-${process.pid}`));
 }
 

@@ -15,6 +15,7 @@ export default defineConfig({
           build: {
             outDir: fromRoot("dist-electron/main"),
             rolldownOptions: {
+              external: ["pdf-parse", "@napi-rs/canvas"],
               output: {
                 entryFileNames: "index.js"
               }

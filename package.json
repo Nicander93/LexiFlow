@@ -6,25 +6,28 @@
   "author": "LexiFlow",
   "license": "MIT",
   "type": "module",
+  "packageManager": "pnpm@11.8.0",
   "scripts": {
     "dev": "vite",
     "typecheck": "node scripts/vue-typecheck.cjs --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
-    "build": "npm run typecheck && vite build && npm run verify:build",
+    "build": "pnpm run typecheck && vite build && pnpm run verify:build",
     "verify:build": "node scripts/verify-build.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "npm run build && playwright test",
-    "dist:win": "npm run build && node scripts/dist-win.mjs nsis",
-    "dist:win:portable": "npm run build && node scripts/dist-win.mjs portable"
+    "test:e2e": "pnpm run build && playwright test",
+    "dist:win": "pnpm run build && node scripts/dist-win.mjs nsis",
+    "dist:win:portable": "pnpm run build && node scripts/dist-win.mjs portable"
   },
   "dependencies": {
+    "@napi-rs/canvas": "0.1.80",
+    "pdf-parse": "^2.4.5",
     "vue": "^3.5.40",
     "vue-router": "^5.2.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
-    "@typescript/typescript6": "^6.0.2",
     "@types/node": "^24.13.3",
+    "@typescript/typescript6": "^6.0.2",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/tsconfig": "^0.9.1",
     "electron": "^43.2.0",
@@ -39,6 +42,10 @@
   "build": {
     "appId": "com.lexiflow.translator",
     "productName": "LexiFlow",
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
+    "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "release"
     },
@@ -49,12 +56,17 @@
       "package.json"
     ],
     "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
     "win": {
       "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "LexiFlow-${version}-${arch}-Setup.${ext}"

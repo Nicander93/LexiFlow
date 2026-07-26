@@ -6,7 +6,7 @@ import logoUrl from "../assets/logo.png";
 
 <template>
   <div class="page">
-    <PageHeader eyebrow="About" title="小而安静，刚好够用" description="LexiFlow 是一款本地优先的桌面语言辅助工具。" />
+    <PageHeader title="关于" />
     <section class="about-hero surface">
       <div class="about-top"><img class="about-logo" :src="logoUrl" alt="LexiFlow" width="70" height="70" /><div><h2>LexiFlow 0.1.0</h2><p>为技术阅读和编程命名而做，支持 Ollama 与 OpenAI-compatible 模型服务。</p></div></div>
       <div class="about-features">

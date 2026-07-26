@@ -27,7 +27,9 @@ export class WindowManager {
         preload: join(moduleDirectory, "../preload/index.cjs"),
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: true
+        // Playwright's isolated Windows runner cannot launch Chromium's sandboxed
+        // renderer (exit 49). Production always remains sandboxed.
+        sandbox: process.env.LEXIFLOW_E2E !== "1"
       }
     });
     window.webContents.on("preload-error", (_event, preloadPath, error) => {
@@ -51,10 +53,10 @@ export class WindowManager {
   async createMainWindow(): Promise<BrowserWindow> {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) return this.mainWindow;
     const window = this.createWindow({
-      width: 1120,
-      height: 760,
-      minWidth: 900,
-      minHeight: 620,
+      width: 960,
+      height: 780,
+      minWidth: 720,
+      minHeight: 600,
       show: false,
       title: "LexiFlow",
       icon: join(moduleDirectory, "../../build/icon.ico")
@@ -84,6 +86,13 @@ export class WindowManager {
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
+  }
+
+  async requestOcrCapture(): Promise<void> {
+    const window = await this.createMainWindow();
+    window.show();
+    window.focus();
+    window.webContents.send(IPC_CHANNELS.ocrCaptureRequested);
   }
 
   async ensurePopupWindow(): Promise<BrowserWindow> {

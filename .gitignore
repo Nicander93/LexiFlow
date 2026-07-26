@@ -10,3 +10,4 @@ coverage/
 *.tsbuildinfo
 test-results/
 playwright-report/
+package-lock.json

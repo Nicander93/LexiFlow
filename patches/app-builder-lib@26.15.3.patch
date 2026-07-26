@@ -1,0 +1,22 @@
+diff --git a/out/util/electronGet.js b/out/util/electronGet.js
+index a941f9d20c10ca58a84b9a600b0df468631aae01..07b850eb4469bc7ff50bbe02d513b7803a2e08c3 100644
+--- a/out/util/electronGet.js
++++ b/out/util/electronGet.js
+@@ -59,14 +59,15 @@ function getCacheDirectory(options) {
+ }
+ function resolveCacheMode() {
+     var _a;
++    const CacheMode = get_1.ElectronDownloadCacheMode || { ReadWrite: 0, ReadOnly: 1, WriteOnly: 2, Bypass: 3 };
+     const varName = "ELECTRON_DOWNLOAD_CACHE_MODE";
+     const cacheOverride = (_a = process.env[varName]) === null || _a === void 0 ? void 0 : _a.trim();
+-    if (cacheOverride && Number(cacheOverride) in get_1.ElectronDownloadCacheMode) {
++    if (cacheOverride && Number(cacheOverride) in CacheMode) {
+         const mode = Number(cacheOverride);
+         builder_util_1.log.debug({ mode }, `cache mode overridden via env var ${varName}`);
+         return mode;
+     }
+-    return get_1.ElectronDownloadCacheMode.ReadWrite;
++    return CacheMode.ReadWrite;
+ }
+ async function extractZipStreaming(file, dir) {
+     var _a;

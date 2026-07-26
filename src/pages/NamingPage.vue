@@ -29,7 +29,7 @@ async function copyName(name: string): Promise<void> {
 
 <template>
   <div class="page">
-    <PageHeader eyebrow="Naming studio" title="给想法一个清楚的名字" description="根据业务语义、语言和代码风格，生成可以直接使用的英文名称。" />
+    <PageHeader title="命名" />
     <section class="surface naming-form">
       <label class="wide-field">业务语义<textarea v-model="sourceText" placeholder="例如：是否已经完成水文数据同步" @keydown.ctrl.enter.prevent="generate" /></label>
       <div class="form-grid">

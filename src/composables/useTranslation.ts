@@ -1,5 +1,6 @@
 import { computed, onUnmounted, ref } from "vue";
 import type {
+  TranslationResult,
   TranslationRequest,
   TranslationStatus
 } from "../../electron/shared/types";
@@ -10,6 +11,7 @@ export function useTranslation() {
   const translator = getTranslatorApi();
   const status = ref<TranslationStatus>("idle");
   const resultText = ref("");
+  const result = ref<TranslationResult>();
   const errorMessage = ref("");
   const currentRequestId = ref<string>();
   let lastRequest: TranslationRequest | undefined;
@@ -20,6 +22,7 @@ export function useTranslation() {
     status.value = event.status;
     if (event.status === "streaming" && event.content) resultText.value += event.content;
     if (event.status === "success" && event.content) resultText.value = event.content;
+    if (event.status === "success") result.value = event.result;
     if (event.error) errorMessage.value = event.error;
   });
 
@@ -29,6 +32,7 @@ export function useTranslation() {
     lastRequest = structuredClone(payload);
     currentRequestId.value = undefined;
     resultText.value = "";
+    result.value = undefined;
     errorMessage.value = "";
     status.value = "loading";
     try {
@@ -56,5 +60,5 @@ export function useTranslation() {
     removeListener();
   });
 
-  return { status, resultText, errorMessage, isRunning, start, stop, retry };
+  return { status, resultText, result, errorMessage, isRunning, start, stop, retry };
 }
