@@ -29,7 +29,7 @@ const emit = defineEmits<{
 <template>
   <section class="result-panel surface">
     <div class="panel-toolbar">
-      <span>处理结果</span>
+      <slot name="toolbar-start"><span>处理结果</span></slot>
       <div class="toolbar-actions">
         <button v-if="status === 'loading' || status === 'streaming'" class="icon-button" title="停止" @click="emit('stop')"><AppIcon name="stop" :size="17" /></button>
         <button v-if="status === 'error' || status === 'cancelled'" class="icon-button" title="重试" @click="emit('retry')"><AppIcon name="refresh" :size="17" /></button>

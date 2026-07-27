@@ -45,6 +45,10 @@ export default defineConfig({
       "@shared": fromRoot("electron/shared")
     }
   },
+  server: {
+    port: 3301,
+    strictPort: true
+  },
   build: {
     outDir: fromRoot("dist"),
     rolldownOptions: {

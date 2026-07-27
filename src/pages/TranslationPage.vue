@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import PageHeader from "../components/PageHeader.vue";
 import ResultPanel from "../components/ResultPanel.vue";
 import SegmentedText from "../components/SegmentedText.vue";
@@ -8,7 +8,7 @@ import DictionaryCard from "../components/dictionary/DictionaryCard.vue";
 import { useTranslation } from "../composables/useTranslation";
 import { useDictionary } from "../composables/useDictionary";
 import type { DictionaryLookupResult, OcrResult, OcrScreen, SegmentAlternative, SegmentRevision, TargetLanguage, TranslationMode, TranslationProfile, TranslationQualityIssue, TranslationSegment } from "../../electron/shared/types";
-import { shouldLookupDictionary } from "../../electron/shared/dictionary-eligibility";
+import { pickTargetDictionaryQuery, shouldLookupDictionary } from "../../electron/shared/dictionary-eligibility";
 import { getTranslatorApi } from "../platform/translator";
 import { checkTranslationQuality } from "../../electron/shared/quality";
 
@@ -30,6 +30,7 @@ const lastTranslatedSource = ref("");
 const hoveredSegmentId = ref<string>();
 const lockedSegmentId = ref<string>();
 const sourceEditorVisible = ref(true);
+const sourceTextarea = ref<HTMLTextAreaElement>();
 const segmentDictionary = ref<DictionaryLookupResult | null>(null);
 const dictionaryTerm = ref("");
 const dictionaryLoading = ref(false);
@@ -68,28 +69,56 @@ const displaySegments = computed<TranslationSegment[]>(() => (result.value?.segm
   return revision ? { ...segment, target: revision.newTarget } : segment;
 }));
 const displayResultText = computed(() => displaySegments.value.length ? displaySegments.value.map((segment) => segment.target).join("\n") : resultText.value);
-const activeSegment = computed(() => displaySegments.value.find((segment) => segment.id === activeSegmentId.value));
+const lockedSegment = computed(() => displaySegments.value.find((segment) => segment.id === lockedSegmentId.value));
 const dictionaryContext = computed(() => displaySegments.value.find((segment) => segment.id === dictionarySegmentId.value));
 const glossaryValidation = computed(() => result.value?.glossaryValidation ?? []);
-const showDictionaryPane = computed(() => dictionaryStatus.value === "found" && Boolean(autoDictionaryResult.value?.entry));
-const primaryActionLabel = computed(() => (showDictionaryPane.value ? "AI 翻译" : "开始翻译"));
+const dictionaryEligible = computed(() => shouldLookupDictionary(sourceText.value));
+const showDictionaryPane = computed(() => dictionaryEligible.value && dictionaryStatus.value === "found" && Boolean(autoDictionaryResult.value?.entry));
+const showDictionaryTab = computed(() => dictionaryEligible.value);
+const primaryActionLabel = computed(() => (showDictionaryPane.value && resultView.value === "dictionary" ? "AI 翻译" : "开始翻译"));
+const showRevisionPopover = computed(() => Boolean(lockedSegment.value && hasStructuredResult.value));
+const showMainDictionary = computed(() => showDictionaryPane.value && resultView.value === "dictionary");
+
+function resizeSourceTextarea(): void {
+  const el = sourceTextarea.value;
+  if (!el) return;
+  el.style.height = "0px";
+  el.style.height = `${el.scrollHeight}px`;
+}
 
 watch(sourceText, (value) => {
   if (lastTranslatedSource.value && value !== lastTranslatedSource.value) {
     reset();
     lastTranslatedSource.value = "";
+    closeDictionary();
   }
+  void nextTick(resizeSourceTextarea);
   if (!shouldLookupDictionary(value)) {
     resetAutoDictionary();
-    if (resultView.value === "dictionary") resultView.value = "translation";
+    resultView.value = "translation";
     return;
   }
   lookupAutoDictionary(value);
 });
 
 watch(dictionaryStatus, (value) => {
+  if (!dictionaryEligible.value) {
+    resultView.value = "translation";
+    return;
+  }
   if (value === "found") resultView.value = "dictionary";
   else if (resultView.value === "dictionary") resultView.value = "translation";
+});
+
+watch(status, (value) => {
+  if (value !== "success") return;
+  const query = pickTargetDictionaryQuery(displaySegments.value, displayResultText.value);
+  if (!query) return;
+  void lookupDictionary(query);
+});
+
+watch(sourceEditorVisible, (visible) => {
+  if (visible) void nextTick(resizeSourceTextarea);
 });
 
 async function translate(): Promise<void> {
@@ -98,6 +127,7 @@ async function translate(): Promise<void> {
   lockedSegmentId.value = undefined;
   revisions.value = [];
   alternatives.value = [];
+  closeDictionary();
   resultView.value = "translation";
   lastTranslatedSource.value = sourceText.value;
   await start({ text: sourceText.value, mode: mode.value, targetLanguage: targetLanguage.value, profileId: profileId.value });
@@ -112,14 +142,15 @@ async function triggerAiTranslate(): Promise<void> {
 }
 
 async function switchResultView(view: ResultView): Promise<void> {
-  if (view === "translation") {
-    await triggerAiTranslate();
+  if (view === "dictionary") {
+    if (!showDictionaryPane.value) return;
+    resultView.value = "dictionary";
     return;
   }
-  resultView.value = "dictionary";
+  await triggerAiTranslate();
 }
 async function reviseSegment(instruction: string): Promise<void> {
-  const segment = activeSegment.value;
+  const segment = lockedSegment.value;
   if (!segment || revisionStatus.value === "loading") return;
   revisionStatus.value = "loading";
   revisionError.value = "";
@@ -132,7 +163,7 @@ async function reviseSegment(instruction: string): Promise<void> {
   });
 }
 async function addActiveSegmentToGlossary(): Promise<void> {
-  const segment = activeSegment.value;
+  const segment = lockedSegment.value;
   if (!segment) return;
   try {
     const now = Date.now();
@@ -174,23 +205,23 @@ async function reviseWithCustomInstruction(): Promise<void> {
   await reviseSegment(instruction);
 }
 function undoRevision(): void {
-  const segmentId = activeSegmentId.value;
+  const segmentId = lockedSegmentId.value;
   if (!segmentId) return;
   const index = [...revisions.value].map((item) => item.segmentId).lastIndexOf(segmentId);
   if (index >= 0) revisions.value.splice(index, 1);
 }
 async function requestAlternatives(): Promise<void> {
-  if (!activeSegment.value || alternativesLoading.value) return;
+  if (!lockedSegment.value || alternativesLoading.value) return;
   alternatives.value = [];
   alternativesLoading.value = true;
   alternativesRequestId.value = await translator.alternatives.start({
-    segment: activeSegment.value,
+    segment: lockedSegment.value,
     targetLanguage: targetLanguage.value,
     profileId: profileId.value
   });
 }
 function applyAlternative(alternative: SegmentAlternative): void {
-  const segment = activeSegment.value;
+  const segment = lockedSegment.value;
   if (!segment) return;
   revisions.value.push({ id: alternative.id, segmentId: segment.id, previousTarget: segment.target, newTarget: alternative.target, instruction: alternative.label, createdAt: Date.now() });
   alternatives.value = [];
@@ -263,10 +294,6 @@ function closeDictionary(): void {
   dictionaryContextLoading.value = false;
   dictionaryContextRequestId.value = undefined;
 }
-function closeDictionaryWhenClickOutside(event: PointerEvent): void {
-  if (!dictionaryTerm.value || !(event.target instanceof Node) || dictionaryCard.value?.contains(event.target)) return;
-  closeDictionary();
-}
 
 function navigateSegment(id: string): void {
   lockedSegmentId.value = id;
@@ -335,7 +362,7 @@ async function copyBilingual(): Promise<void> {
 }
 
 onMounted(async () => {
-  document.addEventListener("pointerdown", closeDictionaryWhenClickOutside);
+  void nextTick(resizeSourceTextarea);
   const settings = await translator.settings.get();
   maxInputLength.value = settings.translation.maxInputLength;
   targetLanguage.value = settings.translation.targetLanguage;
@@ -351,6 +378,7 @@ onMounted(async () => {
     sourceText.value = history.sourceText;
     mode.value = history.mode === "naming" ? "normal" : history.mode;
     targetLanguage.value = history.targetLanguage;
+    void nextTick(resizeSourceTextarea);
   } catch {
     // Ignore malformed session data; it should never block the translation page.
   }
@@ -371,7 +399,6 @@ const removeRevisionListener = translator.revision.onEvent((event) => {
   }
 });
 onUnmounted(() => {
-  document.removeEventListener("pointerdown", closeDictionaryWhenClickOutside);
   removeRevisionListener();
 });
 const removeAlternativesListener = translator.alternatives.onEvent((event) => {
@@ -404,7 +431,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page translation-page">
     <PageHeader title="翻译" class="translation-header">
       <template #leading>
         <div class="segmented">
@@ -442,94 +469,111 @@ onUnmounted(() => {
         <div class="form-actions"><button class="secondary-button" @click="applyOcrEditedText">用编辑后的文本翻译</button></div>
       </div>
     </section>
-    <div class="translation-grid">
+    <div class="translation-stack">
       <section class="input-panel surface">
         <div class="panel-toolbar"><span>原文</span><button class="text-button" @click="hasStructuredResult ? sourceEditorVisible = true : sourceText = ''">{{ hasStructuredResult ? '编辑原文' : '清空' }}</button></div>
-        <SegmentedText
-          v-if="hasStructuredResult && !sourceEditorVisible && result"
-          side="source"
-          :segments="displaySegments"
-          :active-id="activeSegmentId"
-          @hover="handleSegmentHover"
-          @toggle="toggleSegment"
-          @clear="clearSegmentLock"
-          @navigate="navigateSegment"
-          @select-term="lookupDictionary"
-        />
-        <textarea v-else v-model="sourceText" autofocus placeholder="输入或粘贴文本，Ctrl + Enter 执行" @keydown.ctrl.enter.prevent="translate" />
+        <div class="source-body">
+          <SegmentedText
+            v-if="hasStructuredResult && !sourceEditorVisible && result"
+            side="source"
+            :segments="displaySegments"
+            :active-id="activeSegmentId"
+            @hover="handleSegmentHover"
+            @toggle="toggleSegment"
+            @clear="clearSegmentLock"
+            @navigate="navigateSegment"
+            @select-term="lookupDictionary"
+          />
+          <textarea
+            v-else
+            ref="sourceTextarea"
+            v-model="sourceText"
+            autofocus
+            rows="1"
+            placeholder="输入或粘贴文本，Ctrl + Enter 执行"
+            @input="resizeSourceTextarea"
+            @keydown.ctrl.enter.prevent="translate"
+          />
+        </div>
         <div class="input-footer"><span>{{ sourceText.length.toLocaleString() }} / {{ maxInputLength.toLocaleString() }}</span><button class="primary-button" :disabled="isRunning" @click="triggerAiTranslate">{{ primaryActionLabel }}</button></div>
       </section>
-      <section v-if="showDictionaryPane && resultView === 'dictionary'" class="result-panel surface dictionary-result-panel">
+      <section class="result-stack surface">
         <div class="panel-toolbar result-view-tabs">
-          <div class="segmented">
-            <button class="active" @click="switchResultView('dictionary')">词典</button>
-            <button @click="switchResultView('translation')">AI 翻译</button>
+          <div class="segmented" :title="showDictionaryTab ? undefined : '本地词典仅支持短英文词'">
+            <button :class="{ active: showMainDictionary }" :disabled="!showDictionaryTab" @click="switchResultView('dictionary')">词典</button>
+            <button :class="{ active: !showMainDictionary }" @click="switchResultView('translation')">AI 翻译</button>
           </div>
         </div>
-        <DictionaryCard
-          v-if="autoDictionaryResult?.entry"
-          :entry="autoDictionaryResult.entry"
-          @ai-translate="triggerAiTranslate"
-        />
+        <div class="result-stack-body">
+          <template v-if="showMainDictionary">
+            <DictionaryCard
+              v-if="autoDictionaryResult?.entry"
+              :entry="autoDictionaryResult.entry"
+              @ai-translate="triggerAiTranslate"
+            />
+          </template>
+          <template v-else>
+            <p v-if="dictionaryStatus === 'not-found' && dictionaryEligible" class="dictionary-hint muted">本地词典未收录，将使用模型翻译。</p>
+            <p v-else-if="dictionaryStatus === 'unavailable'" class="dictionary-hint muted">{{ autoDictionaryResult?.unavailableReason || '本地词典资源不可用，仍可使用 AI 翻译。' }}</p>
+            <ResultPanel
+              :status="status"
+              :text="displayResultText"
+              :source-text="sourceText"
+              :error="errorMessage"
+              :segments="displaySegments"
+              :active-segment-id="activeSegmentId"
+              @copy="copyResult"
+              @copy-source="copySource"
+              @copy-bilingual="copyBilingual"
+              @stop="stop"
+              @retry="retry"
+              @hover="handleSegmentHover"
+              @toggle="toggleSegment"
+              @clear="clearSegmentLock"
+              @navigate="navigateSegment"
+              @select-term="lookupDictionary"
+            />
+          </template>
+          <section v-if="dictionaryTerm" ref="dictionaryCard" class="dictionary-card surface" aria-live="polite">
+            <div class="panel-toolbar"><span>词典 · {{ dictionaryTerm }}</span><button class="text-button" @click="closeDictionary">关闭</button></div>
+            <div v-if="dictionaryLoading" class="state-message muted"><span class="spinner" />正在查询本地词典</div>
+            <div v-else-if="segmentDictionary?.entry" class="dictionary-content">
+              <DictionaryCard :entry="segmentDictionary.entry" @ai-translate="triggerAiTranslate" />
+              <div v-if="dictionaryContext" class="dictionary-context"><small>当前双语上下文</small><p>{{ dictionaryContext.source }}</p><p>{{ dictionaryContext.target }}</p></div>
+              <div v-if="dictionaryContextLoading || dictionaryContextText || dictionaryContextError" class="dictionary-context"><small>模型补充解释</small><p v-if="dictionaryContextLoading" class="muted">正在补充释义…</p><p v-else-if="dictionaryContextText">{{ dictionaryContextText }}</p><p v-else class="error-text">{{ dictionaryContextError }}</p></div>
+              <div class="dictionary-glossary">
+                <small>加入术语表前请确认源词与目标词（不要直接把整段释义当译文）</small>
+                <div class="form-grid">
+                  <label>源词<input v-model="glossaryFromDictionary.sourceTerm" /></label>
+                  <label>目标词<input v-model="glossaryFromDictionary.targetTerm" placeholder="固定译法" /></label>
+                </div>
+                <button class="secondary-button" @click="addDictionaryTermToGlossary">加入术语表</button>
+                <small v-if="glossaryFromDictionaryNotice" class="muted">{{ glossaryFromDictionaryNotice }}</small>
+              </div>
+            </div>
+            <div v-else-if="dictionaryError" class="state-message error-message">{{ dictionaryError }}</div>
+            <div v-else class="state-message muted">{{ segmentDictionary?.unavailableReason || '本地词典暂未收录该词或短语。' }}</div>
+          </section>
+        </div>
+        <section v-if="showRevisionPopover" class="revision-popover surface">
+          <div class="panel-toolbar">
+            <span>局部重译</span>
+            <div>
+              <button class="text-button" :disabled="alternativesLoading" @click="requestAlternatives">{{ alternativesLoading ? '生成候选中' : '候选译法' }}</button>
+              <button class="text-button" @click="addActiveSegmentToGlossary">加入术语表</button>
+              <button class="text-button" :disabled="!revisions.some((item) => item.segmentId === lockedSegment?.id)" @click="undoRevision">撤销本句修改</button>
+              <button class="text-button" @click="clearSegmentLock">关闭</button>
+            </div>
+          </div>
+          <p>仅向模型发送当前句段。选择一种调整方式：</p>
+          <div class="revision-actions"><button v-for="instruction in ['更自然', '更正式', '更简洁', '更口语', '更直译', '保持原句结构']" :key="instruction" class="secondary-button" :disabled="revisionStatus === 'loading'" @click="reviseSegment(instruction)">{{ instruction }}</button></div>
+          <div class="revision-custom"><input v-model="customRevisionInstruction" :disabled="revisionStatus === 'loading'" placeholder="自定义要求，或指定词语，例如：使用“接口”表达" @keydown.enter.prevent="reviseWithCustomInstruction" /><button class="secondary-button" :disabled="revisionStatus === 'loading'" @click="reviseWithCustomInstruction">按要求重译</button></div>
+          <div v-if="alternatives.length" class="alternative-list"><button v-for="alternative in alternatives" :key="alternative.id" @click="applyAlternative(alternative)"><strong>{{ alternative.label }}</strong><span>{{ alternative.target }}</span><small>{{ alternative.description }}</small></button></div>
+          <small v-if="revisionStatus === 'loading'" class="muted">正在重新表达当前句段…</small><small v-else-if="revisionError" class="error-text">{{ revisionError }}</small><small v-else-if="revisionNotice" class="muted">{{ revisionNotice }}</small>
+        </section>
       </section>
-      <template v-else>
-        <div v-if="showDictionaryPane" class="result-view-tabs-floating">
-          <div class="segmented">
-            <button @click="switchResultView('dictionary')">词典</button>
-            <button class="active" @click="switchResultView('translation')">AI 翻译</button>
-          </div>
-        </div>
-        <p v-if="dictionaryStatus === 'not-found' && shouldLookupDictionary(sourceText)" class="dictionary-hint muted">本地词典未收录，将使用模型翻译。</p>
-        <p v-else-if="dictionaryStatus === 'unavailable'" class="dictionary-hint muted">{{ autoDictionaryResult?.unavailableReason || '本地词典资源不可用，仍可使用 AI 翻译。' }}</p>
-        <ResultPanel
-          :status="status"
-          :text="displayResultText"
-          :source-text="sourceText"
-          :error="errorMessage"
-          :segments="displaySegments"
-          :active-segment-id="activeSegmentId"
-          @copy="copyResult"
-          @copy-source="copySource"
-          @copy-bilingual="copyBilingual"
-          @stop="stop"
-          @retry="retry"
-          @hover="handleSegmentHover"
-          @toggle="toggleSegment"
-          @clear="clearSegmentLock"
-          @navigate="navigateSegment"
-          @select-term="lookupDictionary"
-        />
-      </template>
     </div>
     <section v-if="qualityIssues.length" class="quality-card surface"><div class="panel-toolbar"><span>质量检查</span><button class="text-button" @click="qualityIssues = []">关闭</button></div><ul><li v-for="issue in qualityIssues" :key="`${issue.segmentId}-${issue.kind}`">{{ issue.message }}</li></ul></section>
     <section v-if="glossaryValidation.length" class="quality-card surface"><div class="panel-toolbar"><span>术语校验</span><small>{{ glossaryValidation.filter((item) => item.applied).length }} / {{ glossaryValidation.length }} 已按术语表使用</small></div><ul><li v-for="item in glossaryValidation" :key="item.sourceTerm" :class="item.applied ? 'glossary-valid' : 'glossary-invalid'">{{ item.applied ? '✓' : '!' }} {{ item.sourceTerm }} → {{ item.targetTerm }}{{ item.applied ? '' : '（译文中未检测到）' }}</li></ul></section>
-    <section v-if="activeSegment && hasStructuredResult" class="revision-card surface">
-      <div class="panel-toolbar"><span>局部重译</span><div><button class="text-button" :disabled="alternativesLoading" @click="requestAlternatives">{{ alternativesLoading ? '生成候选中' : '候选译法' }}</button><button class="text-button" @click="addActiveSegmentToGlossary">加入术语表</button><button class="text-button" :disabled="!revisions.some((item) => item.segmentId === activeSegment?.id)" @click="undoRevision">撤销本句修改</button></div></div>
-      <p>仅向模型发送当前句段。选择一种调整方式：</p>
-      <div class="revision-actions"><button v-for="instruction in ['更自然', '更正式', '更简洁', '更口语', '更直译', '保持原句结构']" :key="instruction" class="secondary-button" :disabled="revisionStatus === 'loading'" @click="reviseSegment(instruction)">{{ instruction }}</button></div>
-      <div class="revision-custom"><input v-model="customRevisionInstruction" :disabled="revisionStatus === 'loading'" placeholder="自定义要求，或指定词语，例如：使用“接口”表达" @keydown.enter.prevent="reviseWithCustomInstruction" /><button class="secondary-button" :disabled="revisionStatus === 'loading'" @click="reviseWithCustomInstruction">按要求重译</button></div>
-      <div v-if="alternatives.length" class="alternative-list"><button v-for="alternative in alternatives" :key="alternative.id" @click="applyAlternative(alternative)"><strong>{{ alternative.label }}</strong><span>{{ alternative.target }}</span><small>{{ alternative.description }}</small></button></div>
-      <small v-if="revisionStatus === 'loading'" class="muted">正在重新表达当前句段…</small><small v-else-if="revisionError" class="error-text">{{ revisionError }}</small><small v-else-if="revisionNotice" class="muted">{{ revisionNotice }}</small>
-    </section>
-    <section v-if="dictionaryTerm" ref="dictionaryCard" class="dictionary-card surface" aria-live="polite">
-      <div class="panel-toolbar"><span>词典 · {{ dictionaryTerm }}</span><button class="text-button" @click="closeDictionary">关闭</button></div>
-      <div v-if="dictionaryLoading" class="state-message muted"><span class="spinner" />正在查询本地词典</div>
-      <div v-else-if="segmentDictionary?.entry" class="dictionary-content">
-        <DictionaryCard :entry="segmentDictionary.entry" @ai-translate="triggerAiTranslate" />
-        <div v-if="dictionaryContext" class="dictionary-context"><small>当前双语上下文</small><p>{{ dictionaryContext.source }}</p><p>{{ dictionaryContext.target }}</p></div>
-        <div v-if="dictionaryContextLoading || dictionaryContextText || dictionaryContextError" class="dictionary-context"><small>模型补充解释</small><p v-if="dictionaryContextLoading" class="muted">正在补充释义…</p><p v-else-if="dictionaryContextText">{{ dictionaryContextText }}</p><p v-else class="error-text">{{ dictionaryContextError }}</p></div>
-        <div class="dictionary-glossary">
-          <small>加入术语表前请确认源词与目标词（不要直接把整段释义当译文）</small>
-          <div class="form-grid">
-            <label>源词<input v-model="glossaryFromDictionary.sourceTerm" /></label>
-            <label>目标词<input v-model="glossaryFromDictionary.targetTerm" placeholder="固定译法" /></label>
-          </div>
-          <button class="secondary-button" @click="addDictionaryTermToGlossary">加入术语表</button>
-          <small v-if="glossaryFromDictionaryNotice" class="muted">{{ glossaryFromDictionaryNotice }}</small>
-        </div>
-      </div>
-      <div v-else-if="dictionaryError" class="state-message error-message">{{ dictionaryError }}</div>
-      <div v-else class="state-message muted">{{ segmentDictionary?.unavailableReason || '本地词典暂未收录该词或短语。' }}</div>
-    </section>
   </div>
 </template>

@@ -26,3 +26,12 @@ export function shouldLookupDictionary(text: string): boolean {
 
   return true;
 }
+
+export function pickTargetDictionaryQuery(
+  segments: Array<{ target: string }>,
+  fullText: string
+): string | undefined {
+  const candidate = (segments.length === 1 ? segments[0]?.target : fullText)?.trim() ?? "";
+  if (!candidate || !shouldLookupDictionary(candidate)) return undefined;
+  return candidate;
+}

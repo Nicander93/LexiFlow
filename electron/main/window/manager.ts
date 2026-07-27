@@ -42,7 +42,7 @@ export class WindowManager {
   }
 
   private async loadRenderer(window: BrowserWindow, route = "/"): Promise<void> {
-    const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+    const rendererUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL;
     if (rendererUrl) {
       await window.loadURL(`${rendererUrl}#${route}`);
     } else {

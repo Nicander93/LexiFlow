@@ -4,6 +4,8 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  user-select: none;
+  -webkit-user-select: none;
   background:
     radial-gradient(circle at 78% 4%, rgba(125, 184, 255, .16), transparent 28rem),
     radial-gradient(circle at 42% 105%, rgba(176, 211, 255, .13), transparent 32rem),
@@ -59,6 +61,38 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); }
 .muted { color: var(--muted); }
 .danger { color: var(--danger) !important; }
 .app-icon { display: block; flex: 0 0 auto; }
+.selectable,
+textarea,
+input,
+select,
+.result-text,
+.segment-text,
+.dictionary-content,
+.dictionary-card-panel,
+.dictionary-compact-scroll,
+.history-detail pre,
+.popup-source,
+.popup-result,
+.ocr-preview,
+pre,
+code {
+  user-select: text;
+  -webkit-user-select: text;
+}
+button,
+a,
+label,
+.sidebar,
+.panel-toolbar,
+.page-header,
+.input-footer,
+.toolbar-actions,
+.revision-actions,
+.revision-custom,
+.nav-icon {
+  user-select: none;
+  -webkit-user-select: none;
+}
 .skip-link { position: fixed; left: 18px; top: -60px; z-index: 100; padding: 10px 14px; border-radius: 10px; color: #fff; background: var(--accent); text-decoration: none; transition: top .18s ease; }
 .skip-link:focus { top: 16px; }
 .page-enter-active, .page-leave-active { transition: opacity .18s ease, transform .22s var(--ease-spring); }
