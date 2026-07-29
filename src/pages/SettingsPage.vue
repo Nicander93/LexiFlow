@@ -158,7 +158,9 @@ async function exportDiagnostics(): Promise<void> {
 
 onMounted(async () => {
   try {
-    settings.value = await translator.settings.get();
+    const loaded = await translator.settings.get();
+    loaded.provider.enableReasoning = loaded.provider.enableReasoning === true;
+    settings.value = loaded;
     const [loadedProfiles] = await Promise.all([translator.profiles.list(), reloadGlossary()]);
     profiles.value = loadedProfiles;
   } catch (error) {
@@ -185,6 +187,9 @@ onMounted(async () => {
           <label v-if="settings.provider.type === 'openai-compatible'">API Key<input v-model="settings.provider.apiKey" type="password" autocomplete="off" placeholder="使用系统安全存储加密" /></label>
           <label>请求超时（毫秒）<input v-model.number="settings.provider.timeoutMs" type="number" min="1000" /></label>
           <label v-if="settings.provider.type === 'ollama'">模型常驻时间<input v-model="settings.provider.keepAlive" placeholder="5m" /></label>
+        </div>
+        <div class="toggle-list">
+          <div class="toggle-row"><span>启用 Reasoning（开启后可能更慢、占用更多 token）</span><label class="ios-switch"><input v-model="settings.provider.enableReasoning" type="checkbox" /><span /></label></div>
         </div>
         <div v-if="settings.provider.type === 'openai-compatible'" class="privacy-warning">输入内容会发送到远程模型服务，请确认该服务的隐私政策。</div>
         <button class="secondary-button" :disabled="checking" @click="checkHealth">{{ checking ? '正在检查连接' : '保存并测试连接' }}</button>

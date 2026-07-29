@@ -63,16 +63,32 @@ describe("结构化翻译结果", () => {
     ]);
   });
 
-  it("非法 JSON、缺失或重复 ID 时回退为普通全文译文", () => {
-    for (const responseText of [
-      "普通译文",
-      '{"segments":[{"id":"segment-1","target":"一"}]}',
-      '{"segments":[{"id":"segment-1","target":"一"},{"id":"segment-1","target":"二"}]}'
-    ]) {
-      const result = createTranslationResult({ ...common, responseText });
-      expect(result.segments).toEqual([]);
-      expect(result.targetText).toBe(responseText);
-    }
+  it("非法 JSON 或无法抽出译文时回退为原始全文；可抽出 target 时拼成可读译文", () => {
+    expect(createTranslationResult({ ...common, responseText: "普通译文" })).toMatchObject({
+      segments: [],
+      targetText: "普通译文"
+    });
+    expect(createTranslationResult({
+      ...common,
+      responseText: '{"segments":[{"id":"segment-1","target":"一"}]}'
+    })).toMatchObject({
+      segments: [],
+      targetText: "一"
+    });
+    expect(createTranslationResult({
+      ...common,
+      responseText: '{"segments":[{"id":"segment-1","target":"一"},{"id":"segment-1","target":"二"}]}'
+    })).toMatchObject({
+      segments: [],
+      targetText: "一\n二"
+    });
+    expect(createTranslationResult({
+      ...common,
+      responseText: '{"segments":[{"id":"segment-1","target":"甲。"},{"id":"segment-2","target":"乙。"},{"id":"segment-3","target":"丙。"}]}'
+    })).toMatchObject({
+      segments: [],
+      targetText: "甲。\n乙。\n丙。"
+    });
   });
 
   it("保留当前请求命中的术语校验结果", () => {

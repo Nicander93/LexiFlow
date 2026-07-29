@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     baseUrl: "http://127.0.0.1:11434",
     model: "qwen3.5:9b",
     remoteUsageConfirmed: false,
+    enableReasoning: false,
     timeoutMs: 60_000,
     stream: true,
     keepAlive: "5m"

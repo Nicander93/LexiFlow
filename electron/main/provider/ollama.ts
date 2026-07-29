@@ -22,6 +22,10 @@ export class OllamaProvider implements TranslationProvider {
     private readonly settings: AppSettings
   ) {}
 
+  private thinkEnabled(): boolean {
+    return this.config.enableReasoning === true;
+  }
+
   async healthCheck(signal?: AbortSignal): Promise<ProviderHealth> {
     try {
       const response = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/api/tags`, {
@@ -53,7 +57,7 @@ export class OllamaProvider implements TranslationProvider {
         model: this.config.model,
         stream: true,
         keep_alive: this.config.keepAlive,
-        think: false,
+        think: this.thinkEnabled(),
         messages: [
           { role: "system", content: prompt.system },
           { role: "user", content: prompt.user }
@@ -76,7 +80,7 @@ export class OllamaProvider implements TranslationProvider {
     const response = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, stream: true, keep_alive: this.config.keepAlive, think: false, messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }], options: { temperature: 0.2, top_p: 0.8 } }),
+      body: JSON.stringify({ model: this.config.model, stream: true, keep_alive: this.config.keepAlive, think: this.thinkEnabled(), messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }], options: { temperature: 0.2, top_p: 0.8 } }),
       signal: createRequestSignal(this.config.timeoutMs, signal)
     });
     await ensureResponse(response);
@@ -88,7 +92,7 @@ export class OllamaProvider implements TranslationProvider {
     const prompt = buildAlternativesPrompt(request, this.settings);
     const response = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/api/chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, stream: true, keep_alive: this.config.keepAlive, think: false, messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }], options: { temperature: 0.35, top_p: 0.9 } }),
+      body: JSON.stringify({ model: this.config.model, stream: true, keep_alive: this.config.keepAlive, think: this.thinkEnabled(), messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }], options: { temperature: 0.35, top_p: 0.9 } }),
       signal: createRequestSignal(this.config.timeoutMs, signal)
     });
     await ensureResponse(response);
@@ -100,7 +104,7 @@ export class OllamaProvider implements TranslationProvider {
     const prompt = buildDictionaryContextPrompt(request, this.settings);
     const response = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/api/chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, stream: true, keep_alive: this.config.keepAlive, think: false, messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }], options: { temperature: 0.1, top_p: 0.8, num_predict: 160 } }),
+      body: JSON.stringify({ model: this.config.model, stream: true, keep_alive: this.config.keepAlive, think: this.thinkEnabled(), messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }], options: { temperature: 0.1, top_p: 0.8, num_predict: 160 } }),
       signal: createRequestSignal(this.config.timeoutMs, signal)
     });
     await ensureResponse(response);
@@ -116,7 +120,7 @@ export class OllamaProvider implements TranslationProvider {
         model: this.config.model,
         stream: true,
         keep_alive: this.config.keepAlive,
-        think: false,
+        think: this.thinkEnabled(),
         messages,
         options: { temperature: 0, top_p: 0.8, num_predict: 2_048 }
       }),

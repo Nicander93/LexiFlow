@@ -1,6 +1,6 @@
 /**
  * 将模型原文组装为 TranslationResult。
- * 句段 JSON 非法时回退为单段全文译文，不在渲染侧做文本相似度重匹配。
+ * 句段 JSON 完整通过时保留联动；否则尽量抽出 target 作全文译文，不在渲染侧做文本相似度重匹配。
  */
 import type {
   SourceSegment,
@@ -8,7 +8,7 @@ import type {
   TranslationResult,
   GlossaryMatchValidation
 } from "../../shared/types";
-import { validateSegmentResponse } from "../core/structured";
+import { fallbackSegmentTargetText, validateSegmentResponse } from "../core/structured";
 
 export function createTranslationResult(options: {
   requestId: string;
@@ -24,7 +24,9 @@ export function createTranslationResult(options: {
 }): TranslationResult {
   const parsed = validateSegmentResponse(options.responseText, options.sourceSegments);
   const segments = parsed.ok ? parsed.segments : [];
-  const targetText = parsed.ok ? parsed.targetText : options.responseText.trim();
+  const targetText = parsed.ok
+    ? parsed.targetText
+    : (fallbackSegmentTargetText(options.responseText) ?? options.responseText.trim());
   return {
     requestId: options.requestId,
     sourceText: options.sourceText,

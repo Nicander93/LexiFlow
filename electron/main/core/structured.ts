@@ -94,6 +94,21 @@ export function validateSegmentResponse(content: string, sourceSegments: SourceS
   return { ok: true, kind: "segments", segments, targetText: segments.map((segment) => segment.target).join("\n") };
 }
 
+/** 校验失败时尽量抽出 target 拼成可读译文，避免把原始 JSON 甩给 UI。不重建 segment 联动。 */
+export function fallbackSegmentTargetText(content: string): string | null {
+  const parsed = parseJson(content);
+  if (!parsed.ok || !parsed.value || typeof parsed.value !== "object") return null;
+  const segments = (parsed.value as { segments?: unknown }).segments;
+  if (!Array.isArray(segments)) return null;
+  const targets: string[] = [];
+  for (const item of segments) {
+    if (!item || typeof item !== "object") continue;
+    const target = (item as { target?: unknown }).target;
+    if (typeof target === "string" && target.trim()) targets.push(target.trim());
+  }
+  return targets.length ? targets.join("\n") : null;
+}
+
 /** Exactly one of each fixed label; ids come from createId, never from the model. 三个标签各一次；id 由调用方生成。 */
 export function validateAlternativesResponse(content: string, createId: () => string): AlternativesParseOk | StructuredParseFailure {
   const parsed = parseJson(content);

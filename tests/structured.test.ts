@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   buildStructuredRepairPrompt,
+  fallbackSegmentTargetText,
   getStructuredParseFailureCounts,
   recordStructuredParseFailure,
   resetStructuredParseFailureCounts,
@@ -34,6 +35,23 @@ describe("结构化输出校验与一次修复回退", () => {
       '{"segments":[{"id":"segment-9","target":"一。"},{"id":"segment-2","target":"二。"}]}',
       sourceSegments
     )).toMatchObject({ ok: false, reason: "missing-id" });
+  });
+
+  it("校验失败时可抽出 target 作为可读全文，不重建 segments", () => {
+    expect(fallbackSegmentTargetText('{"segments":[{"id":"segment-1","target":"一。"},{"id":"x","target":"二。"}]}')).toBe("一。\n二。");
+    expect(fallbackSegmentTargetText("普通译文")).toBeNull();
+    expect(fallbackSegmentTargetText('{"segments":[]}')).toBeNull();
+    const result = createTranslationResult({
+      requestId: "r-fallback",
+      sourceText: "One. Two.",
+      sourceLanguage: "en",
+      targetLanguage: "zh-CN",
+      sourceSegments,
+      modelInfo: { provider: "ollama", model: "qwen3", durationMs: 1 },
+      responseText: '{"segments":[{"id":"segment-1","target":"一。"},{"id":"segment-9","target":"二。"}]}'
+    });
+    expect(result.segments).toEqual([]);
+    expect(result.targetText).toBe("一。\n二。");
   });
 
   it("候选：非法标签或数量不符失败；三种标签通过", () => {

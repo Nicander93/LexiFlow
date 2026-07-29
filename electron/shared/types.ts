@@ -302,6 +302,8 @@ export interface ProviderConfig {
   model: string;
   /** Explicit user acknowledgement required before content is sent to a remote Provider. */
   remoteUsageConfirmed?: boolean;
+  /** When true, allow model thinking/reasoning; default false for translation latency. */
+  enableReasoning?: boolean;
   apiKey?: string;
   timeoutMs: number;
   stream: boolean;

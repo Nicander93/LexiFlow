@@ -17,6 +17,17 @@ import type {
   ,SegmentAlternativeRequest
 } from "../../shared/types";
 
+export function buildReasoningBody(enableReasoning?: boolean): {
+  reasoning_effort: "none" | "medium";
+  chat_template_kwargs: { enable_thinking: boolean };
+} {
+  const enabled = enableReasoning === true;
+  return {
+    reasoning_effort: enabled ? "medium" : "none",
+    chat_template_kwargs: { enable_thinking: enabled }
+  };
+}
+
 export class OpenAICompatibleProvider implements TranslationProvider {
   constructor(
     private readonly config: ProviderConfig,
@@ -26,6 +37,10 @@ export class OpenAICompatibleProvider implements TranslationProvider {
   private headers(): Record<string, string> {
     if (!this.config.apiKey) throw new UserFacingError("请先在设置中填写 API Key。 ");
     return { "Content-Type": "application/json", Authorization: `Bearer ${this.config.apiKey}` };
+  }
+
+  private reasoningFields() {
+    return buildReasoningBody(this.config.enableReasoning);
   }
 
   async healthCheck(signal?: AbortSignal): Promise<ProviderHealth> {
@@ -59,6 +74,7 @@ export class OpenAICompatibleProvider implements TranslationProvider {
         temperature: options.temperature,
         top_p: options.topP,
         max_tokens: options.maxTokens,
+        ...this.reasoningFields(),
         messages: [
           { role: "system", content: prompt.system },
           { role: "user", content: prompt.user }
@@ -75,7 +91,7 @@ export class OpenAICompatibleProvider implements TranslationProvider {
     const prompt = buildRevisionPrompt(request, this.settings);
     const response = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/chat/completions`, {
       method: "POST", headers: this.headers(),
-      body: JSON.stringify({ model: this.config.model, stream: true, temperature: 0.2, top_p: 0.8, messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }] }),
+      body: JSON.stringify({ model: this.config.model, stream: true, temperature: 0.2, top_p: 0.8, ...this.reasoningFields(), messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }] }),
       signal: createRequestSignal(this.config.timeoutMs, signal)
     });
     await ensureResponse(response);
@@ -87,7 +103,7 @@ export class OpenAICompatibleProvider implements TranslationProvider {
     const prompt = buildAlternativesPrompt(request, this.settings);
     const response = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/chat/completions`, {
       method: "POST", headers: this.headers(),
-      body: JSON.stringify({ model: this.config.model, stream: true, temperature: 0.35, top_p: 0.9, messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }] }),
+      body: JSON.stringify({ model: this.config.model, stream: true, temperature: 0.35, top_p: 0.9, ...this.reasoningFields(), messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }] }),
       signal: createRequestSignal(this.config.timeoutMs, signal)
     });
     await ensureResponse(response);
@@ -99,7 +115,7 @@ export class OpenAICompatibleProvider implements TranslationProvider {
     const prompt = buildDictionaryContextPrompt(request, this.settings);
     const response = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/chat/completions`, {
       method: "POST", headers: this.headers(),
-      body: JSON.stringify({ model: this.config.model, stream: true, temperature: 0.1, top_p: 0.8, max_tokens: 160, messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }] }),
+      body: JSON.stringify({ model: this.config.model, stream: true, temperature: 0.1, top_p: 0.8, max_tokens: 160, ...this.reasoningFields(), messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }] }),
       signal: createRequestSignal(this.config.timeoutMs, signal)
     });
     await ensureResponse(response);
@@ -111,7 +127,7 @@ export class OpenAICompatibleProvider implements TranslationProvider {
     const response = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/chat/completions`, {
       method: "POST",
       headers: this.headers(),
-      body: JSON.stringify({ model: this.config.model, stream: true, temperature: 0, top_p: 0.8, max_tokens: 2_048, messages }),
+      body: JSON.stringify({ model: this.config.model, stream: true, temperature: 0, top_p: 0.8, max_tokens: 2_048, ...this.reasoningFields(), messages }),
       signal: createRequestSignal(this.config.timeoutMs, signal)
     });
     await ensureResponse(response);
