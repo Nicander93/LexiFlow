@@ -7,6 +7,7 @@ defineProps<{
   status: TranslationStatus;
   text: string;
   error?: string;
+  warning?: string;
   placeholder?: string;
   sourceText?: string;
   segments?: TranslationSegment[];
@@ -41,17 +42,20 @@ const emit = defineEmits<{
     <div v-if="status === 'error'" class="state-message error-message">{{ error }}</div>
     <div v-else-if="status === 'loading'" class="state-message state-message--stack"><span class="soft-loader"><i /><i /><i /></span><strong>正在唤醒模型</strong><small>第一段内容很快会出现在这里</small></div>
     <div v-else-if="!text" class="state-message state-message--stack muted"><span class="empty-orb"><AppIcon name="sparkle" :size="25" /></span><strong>{{ placeholder || '译文会在这里流动起来' }}</strong><small>保留段落、代码与换行，不额外发挥</small></div>
-    <SegmentedText
-      v-else-if="segments?.length"
-      side="target"
-      :segments="segments"
-      :active-id="activeSegmentId"
-      @hover="emit('hover', $event)"
-      @toggle="emit('toggle', $event)"
-      @clear="emit('clear')"
-      @navigate="emit('navigate', $event)"
-      @select-term="(term, segmentId) => emit('selectTerm', term, segmentId)"
-    />
-    <pre v-else class="result-text">{{ text }}<span v-if="status === 'streaming'" class="stream-cursor" /></pre>
+    <template v-else>
+      <div v-if="warning" class="state-message warning-message">{{ warning }}</div>
+      <SegmentedText
+        v-if="segments?.length"
+        side="target"
+        :segments="segments"
+        :active-id="activeSegmentId"
+        @hover="emit('hover', $event)"
+        @toggle="emit('toggle', $event)"
+        @clear="emit('clear')"
+        @navigate="emit('navigate', $event)"
+        @select-term="(term, segmentId) => emit('selectTerm', term, segmentId)"
+      />
+      <pre v-else class="result-text">{{ text }}<span v-if="status === 'streaming'" class="stream-cursor" /></pre>
+    </template>
   </section>
 </template>

@@ -8,6 +8,7 @@ export interface DictionaryRepository {
   findExact(query: string): RawDictionaryRow | null;
   findLemma(form: string): RawDictionaryRow | null;
   findByStripKey(sw: string, limit?: number): RawDictionaryRow[];
+  findByPrefix(prefix: string, limit?: number): RawDictionaryRow[];
   close(): void;
 }
 
@@ -31,6 +32,7 @@ export class EcdictRepository implements DictionaryRepository {
   private findExactStmt: ReturnType<DatabaseSync["prepare"]> | null = null;
   private findLemmaStmt: ReturnType<DatabaseSync["prepare"]> | null = null;
   private findSwStmt: ReturnType<DatabaseSync["prepare"]> | null = null;
+  private findPrefixStmt: ReturnType<DatabaseSync["prepare"]> | null = null;
 
   constructor(private readonly databasePath: string) {}
 
@@ -65,6 +67,7 @@ export class EcdictRepository implements DictionaryRepository {
         LIMIT 1
       `);
       this.findSwStmt = db.prepare(`${ENTRY_SELECT} WHERE sw = ? ORDER BY word COLLATE NOCASE LIMIT ?`);
+      this.findPrefixStmt = db.prepare(`${ENTRY_SELECT} WHERE word LIKE ? COLLATE NOCASE ORDER BY CASE WHEN frq IS NULL OR frq <= 0 THEN 999999 ELSE frq END, word COLLATE NOCASE LIMIT ?`);
 
       const probe = this.findExactStmt.get("sorry") as RawDictionaryRow | undefined;
       if (!probe && entryCount > 0) {
@@ -112,6 +115,11 @@ export class EcdictRepository implements DictionaryRepository {
     return this.findSwStmt.all(sw, limit) as unknown as RawDictionaryRow[];
   }
 
+  findByPrefix(prefix: string, limit = 5): RawDictionaryRow[] {
+    if (!this.findPrefixStmt || !prefix || prefix.length < 2) return [];
+    return this.findPrefixStmt.all(`${prefix}%`, limit) as unknown as RawDictionaryRow[];
+  }
+
   close(): void {
     try {
       this.db?.close();
@@ -122,5 +130,6 @@ export class EcdictRepository implements DictionaryRepository {
     this.findExactStmt = null;
     this.findLemmaStmt = null;
     this.findSwStmt = null;
+    this.findPrefixStmt = null;
   }
 }

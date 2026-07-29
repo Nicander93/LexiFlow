@@ -131,8 +131,18 @@
 .toggle-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: 18px; overflow: hidden; border-radius: 14px; background: var(--border); }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 54px; padding: 10px 14px; background: rgba(249,251,254,.94); color: var(--ink-soft); font-size: 12px; }
 .toggle-row select { width: 145px; padding-block: 7px; }
-.ios-switch { position: relative; display: inline-block; width: 42px; height: 25px; flex: 0 0 auto; }
-.ios-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.ios-switch { position: relative; display: inline-block; width: 42px; height: 25px; flex: 0 0 auto; overflow: hidden; }
+.ios-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 .ios-switch span { position: absolute; inset: 0; border-radius: 999px; background: #d3dae4; transition: .22s var(--ease-spring); }
 .ios-switch span::after { position: absolute; top: 3px; left: 3px; width: 19px; height: 19px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(37,52,76,.22); content: ""; transition: .22s var(--ease-spring); }
 .ios-switch input:checked + span { background: var(--accent); }

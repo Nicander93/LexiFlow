@@ -1,4 +1,5 @@
 import { app } from "electron";
+import { getNonFatalErrorCounts } from "./non-fatal";
 import { getStructuredParseFailureCounts } from "./structured";
 
 export interface DiagnosticReport {
@@ -11,6 +12,7 @@ export interface DiagnosticReport {
   locale: string;
   userDataPath: string;
   structuredParseFailures: Record<string, number>;
+  nonFatalErrors: Record<string, number>;
   notes: string[];
 }
 
@@ -26,9 +28,10 @@ export function buildDiagnosticReport(appVersion: string): DiagnosticReport {
     locale: app.getLocale(),
     userDataPath: app.getPath("userData"),
     structuredParseFailures: getStructuredParseFailureCounts(),
+    nonFatalErrors: getNonFatalErrorCounts(),
     notes: [
       "本报告不含原文、译文、文档内容或 API Key。",
-      "structuredParseFailures 仅为匿名计数。"
+      "structuredParseFailures / nonFatalErrors 仅为匿名计数。"
     ]
   };
 }

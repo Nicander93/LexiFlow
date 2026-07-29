@@ -32,6 +32,8 @@ const glossaryDraft = ref({
 });
 const profileDraft = ref<TranslationProfile>();
 const showClearDataConfirm = ref(false);
+const apiKeyDraft = ref("");
+const apiKeyConfigured = ref(false);
 const translator = getTranslatorApi();
 const glossaryGroups = computed(() => {
   const groups = new Map<string, GlossaryEntry[]>();
@@ -47,6 +49,18 @@ function notify(text: string, type: "success" | "error" = "success"): void {
   setTimeout(() => (message.value = ""), 4000);
 }
 
+function syncApiKeyState(next: AppSettings): void {
+  apiKeyConfigured.value = Boolean(next.provider.apiKeyConfigured);
+  apiKeyDraft.value = "";
+}
+
+function buildSettingsPayload(): AppSettings {
+  const payload = toIpcPayload(settings.value!);
+  payload.provider.apiKey = apiKeyDraft.value;
+  payload.provider.apiKeyConfigured = apiKeyDraft.value.trim() ? false : apiKeyConfigured.value;
+  return payload;
+}
+
 async function save(): Promise<boolean> {
   if (!settings.value) return false;
   if (settings.value.provider.type === "openai-compatible" && !settings.value.provider.remoteUsageConfirmed) {
@@ -57,8 +71,9 @@ async function save(): Promise<boolean> {
   if (settings.value.provider.type === "ollama") settings.value.provider.remoteUsageConfirmed = false;
   saving.value = true;
   try {
-    const result = await translator.settings.update(toIpcPayload(settings.value));
+    const result = await translator.settings.update(buildSettingsPayload());
     settings.value = result.settings;
+    syncApiKeyState(result.settings);
     if (result.shortcutResult.errors.length) notify(result.shortcutResult.errors.join("\n"), "error");
     else notify("设置已保存。");
     return true;
@@ -141,6 +156,7 @@ async function clearLocalData(): Promise<void> {
   try {
     await translator.privacy.clearLocalData();
     settings.value = await translator.settings.get();
+    syncApiKeyState(settings.value);
     glossary.value = [];
     glossaryConflicts.value = [];
     profiles.value = await translator.profiles.list();
@@ -161,6 +177,7 @@ onMounted(async () => {
     const loaded = await translator.settings.get();
     loaded.provider.enableReasoning = loaded.provider.enableReasoning === true;
     settings.value = loaded;
+    syncApiKeyState(settings.value);
     const [loadedProfiles] = await Promise.all([translator.profiles.list(), reloadGlossary()]);
     profiles.value = loadedProfiles;
   } catch (error) {
@@ -184,7 +201,7 @@ onMounted(async () => {
           <label>Provider<select v-model="settings.provider.type"><option value="ollama">Ollama</option><option value="openai-compatible">OpenAI-compatible</option></select></label>
           <label>Base URL<input v-model="settings.provider.baseUrl" placeholder="http://127.0.0.1:11434" /></label>
           <label>模型名称<input v-model="settings.provider.model" list="model-options" placeholder="手动输入或连接后选择" /><datalist id="model-options"><option v-for="model in models" :key="model.id" :value="model.id" /></datalist></label>
-          <label v-if="settings.provider.type === 'openai-compatible'">API Key<input v-model="settings.provider.apiKey" type="password" autocomplete="off" placeholder="使用系统安全存储加密" /></label>
+          <label v-if="settings.provider.type === 'openai-compatible'">API Key<input v-model="apiKeyDraft" type="password" autocomplete="new-password" :placeholder="apiKeyConfigured ? '已配置，输入新值可覆盖' : '使用系统安全存储加密'" @input="apiKeyConfigured = false" /></label>
           <label>请求超时（毫秒）<input v-model.number="settings.provider.timeoutMs" type="number" min="1000" /></label>
           <label v-if="settings.provider.type === 'ollama'">模型常驻时间<input v-model="settings.provider.keepAlive" placeholder="5m" /></label>
         </div>
@@ -197,7 +214,16 @@ onMounted(async () => {
 
       <SettingsSection icon="keyboard" title="全局快捷键" description="使用 Electron accelerator 格式，例如 Ctrl+Alt+T">
         <template #aside><label class="ios-switch" title="暂停快捷键"><input v-model="settings.shortcuts.paused" type="checkbox" /><span /></label></template>
-        <div class="form-grid"><label>快速翻译<input v-model="settings.shortcuts.translation" /></label><label>编程命名<input v-model="settings.shortcuts.naming" /></label><label>截图 OCR<input v-model="settings.shortcuts.screenshot" /></label></div>
+        <div class="form-grid">
+          <label>快速翻译<input v-model="settings.shortcuts.translation" /></label>
+          <label>编程命名<input v-model="settings.shortcuts.naming" /></label>
+          <label>截图 OCR<input v-model="settings.shortcuts.screenshot" /></label>
+          <label>快速翻译默认场景
+            <select v-model="settings.shortcuts.defaultTranslationProfileId">
+              <option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
+            </select>
+          </label>
+        </div>
       </SettingsSection>
 
       <SettingsSection icon="translate" title="翻译与历史" description="控制默认语言、输入限制和本地记录">
@@ -245,7 +271,7 @@ onMounted(async () => {
           <label>匹配方式<select v-model="glossaryDraft.matchMode"><option value="word">完整单词</option><option value="exact">精确文本</option><option value="phrase">短语</option></select></label>
           <label class="wide-field">备注<input v-model="glossaryDraft.note" placeholder="可选说明" /></label>
         </div>
-        <label class="toggle-row glossary-case"><span>区分大小写</span><label class="ios-switch"><input v-model="glossaryDraft.caseSensitive" type="checkbox" /><span /></label></label>
+        <div class="toggle-row glossary-case"><span>区分大小写</span><label class="ios-switch"><input v-model="glossaryDraft.caseSensitive" type="checkbox" /><span /></label></div>
         <div class="form-actions">
           <button class="secondary-button" @click="saveGlossary">{{ glossaryDraft.id ? '保存修改' : '添加术语' }}</button>
           <button v-if="glossaryDraft.id" class="text-button" @click="glossaryDraft = { id: '', sourceTerm: '', targetTerm: '', sourceLanguage: 'auto', targetLanguage: 'auto', domain: '', note: '', matchMode: 'word', caseSensitive: false }">取消编辑</button>

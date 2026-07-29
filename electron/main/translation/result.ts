@@ -6,6 +6,7 @@ import type {
   SourceSegment,
   TranslationModelInfo,
   TranslationResult,
+  TranslationSegment,
   GlossaryMatchValidation
 } from "../../shared/types";
 import { fallbackSegmentTargetText, validateSegmentResponse } from "../core/structured";
@@ -13,6 +14,7 @@ import { fallbackSegmentTargetText, validateSegmentResponse } from "../core/stru
 export function createTranslationResult(options: {
   requestId: string;
   sourceText: string;
+  originalSourceText?: string;
   sourceLanguage: string;
   targetLanguage: string;
   sourceSegments: SourceSegment[];
@@ -20,9 +22,13 @@ export function createTranslationResult(options: {
   promptVersion?: string;
   responseText: string;
   glossaryValidation?: GlossaryMatchValidation[];
+  cleanupActions?: TranslationResult["cleanupActions"];
   createdAt?: number;
+  segments?: TranslationSegment[];
 }): TranslationResult {
-  const parsed = validateSegmentResponse(options.responseText, options.sourceSegments);
+  const parsed = options.segments?.length
+    ? { ok: true as const, segments: options.segments, targetText: options.segments.map((segment) => segment.target).join("\n") }
+    : validateSegmentResponse(options.responseText, options.sourceSegments);
   const segments = parsed.ok ? parsed.segments : [];
   const targetText = parsed.ok
     ? parsed.targetText
@@ -30,6 +36,7 @@ export function createTranslationResult(options: {
   return {
     requestId: options.requestId,
     sourceText: options.sourceText,
+    originalSourceText: options.originalSourceText ?? options.sourceText,
     targetText,
     sourceLanguage: options.sourceLanguage,
     targetLanguage: options.targetLanguage,
@@ -37,6 +44,7 @@ export function createTranslationResult(options: {
     modelInfo: options.modelInfo,
     promptVersion: options.promptVersion,
     glossaryValidation: options.glossaryValidation,
+    cleanupActions: options.cleanupActions,
     createdAt: options.createdAt ?? Date.now()
   };
 }

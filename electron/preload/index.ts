@@ -30,6 +30,7 @@ import {
   type ShortcutRegistrationResult,
   type TranslationEvent,
   type TranslationHistory,
+  type HistoryRevisionUpdate,
   type TranslationRequest
   ,type TranslationProfile
 } from "../shared/types";
@@ -78,8 +79,10 @@ const api = {
   },
   history: {
     list: (): Promise<TranslationHistory[]> => ipcRenderer.invoke(IPC_CHANNELS.historyList),
+    get: (id: string): Promise<TranslationHistory | undefined> => ipcRenderer.invoke(IPC_CHANNELS.historyGet, id),
     search: (query: string): Promise<TranslationHistory[]> => ipcRenderer.invoke(IPC_CHANNELS.historySearch, query),
     toggleFavorite: (id: string): Promise<TranslationHistory | undefined> => ipcRenderer.invoke(IPC_CHANNELS.historyToggleFavorite, id),
+    updateRevisions: (update: HistoryRevisionUpdate): Promise<TranslationHistory | undefined> => ipcRenderer.invoke(IPC_CHANNELS.historyUpdateRevisions, update),
     delete: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.historyDelete, id),
     clear: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.historyClear)
   },
@@ -132,6 +135,8 @@ const api = {
     openMain: (route?: string): void => ipcRenderer.send(IPC_CHANNELS.windowOpenMain, route),
     closePopup: (): void => ipcRenderer.send(IPC_CHANNELS.popupClose),
     pinPopup: (pinned: boolean): void => ipcRenderer.send(IPC_CHANNELS.popupPin, pinned),
+    adaptPopupHeight: (kind?: "dictionary" | "translation" | "naming" | "default"): void =>
+      ipcRenderer.send(IPC_CHANNELS.popupAdaptHeight, kind),
     onPopupPayload: (listener: (payload: PopupPayload) => void): (() => void) =>
       on(IPC_CHANNELS.popupPayload, listener),
     onNavigate: (listener: (route: string) => void): (() => void) => on("navigation:open", listener)

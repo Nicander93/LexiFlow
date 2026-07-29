@@ -1,8 +1,5 @@
 /**
- * Coordinates interactive model work vs background document chunks.
- * Interactive (translation / revision / alternatives / dictionary) always wins.
- * 管理模型调用的优先级，保证划词翻译（交互）永远优先于文档后台分块。
- * 交互请求与文档分块抢同一条模型通道；交互永远优先，文档要么等，要么在分块间隙让路。
+ * 兼容旧单测的交互/文档互斥门。生产路径请使用 ModelTaskScheduler。
  */
 export class ModelConcurrencyGate {
   private interactive = 0;
@@ -18,7 +15,6 @@ export class ModelConcurrencyGate {
     this.flush();
   }
 
-  /** Waits until no interactive request is active and no other document holds the slot. 无交互、无其他文档占槽时才能拿到；可被 Abort 打断。 */
   async acquireDocument(signal: AbortSignal): Promise<void> {
     for (;;) {
       if (signal.aborted) throw Object.assign(new Error("Aborted"), { name: "AbortError" });
@@ -51,7 +47,6 @@ export class ModelConcurrencyGate {
     this.flush();
   }
 
-  /** Between document chunks: yield while interactive work is running. 分块间隙有交互任务时挂起，避免长文档拖住划词。 */
   async yieldForInteractive(signal: AbortSignal): Promise<void> {
     while (this.interactive > 0) {
       if (signal.aborted) throw Object.assign(new Error("Aborted"), { name: "AbortError" });

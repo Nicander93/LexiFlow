@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanInputText } from "../electron/main/core/text-cleanup";
+import { cleanInputText, prepareTranslationInput } from "../electron/main/core/text-cleanup";
 
 const defaults = { preserveOriginalLineBreaks: false, protectCodeBlocks: true };
 
@@ -16,5 +16,18 @@ describe("输入文本清理", () => {
 
   it("允许关闭换行合并", () => {
     expect(cleanInputText("one\ntwo", { ...defaults, preserveOriginalLineBreaks: true })).toBe("one\ntwo");
+  });
+
+  it("prepareTranslationInput 保留原文与清理动作", () => {
+    const prepared = prepareTranslationInput("Artifi-\ncial intelligence", defaults);
+    expect(prepared.originalText).toBe("Artifi-\ncial intelligence");
+    expect(prepared.normalizedText).toBe("Artificial intelligence");
+    expect(prepared.cleanupActions.some((item) => item.type === "remove-soft-wraps")).toBe(true);
+  });
+
+  it("清理失败时可回退：空结果仍返回可翻译文本", () => {
+    const prepared = prepareTranslationInput("  hello  ", { ...defaults, preserveOriginalLineBreaks: true });
+    expect(prepared.normalizedText).toBe("hello");
+    expect(prepared.originalText).toBe("  hello  ");
   });
 });

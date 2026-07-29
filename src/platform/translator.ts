@@ -114,6 +114,7 @@ export function installBrowserPreviewApi(): void {
     },
     history: {
       list: async () => structuredClone(history),
+      get: async (id) => structuredClone(history.find((item) => item.id === id)),
       search: async (query) => {
         const normalized = query.trim().toLowerCase();
         return structuredClone(!normalized ? history : history.filter((item) => item.sourceText.toLowerCase().includes(normalized) || item.resultText.toLowerCase().includes(normalized)));
@@ -122,6 +123,14 @@ export function installBrowserPreviewApi(): void {
         const item = history.find((candidate) => candidate.id === id);
         if (!item) return undefined;
         item.isFavorite = !item.isFavorite;
+        return structuredClone(item);
+      },
+      updateRevisions: async (update) => {
+        const item = history.find((candidate) => candidate.id === update.id);
+        if (!item) return undefined;
+        item.revisions = update.revisions;
+        item.resultText = update.resultText;
+        item.updatedAt = new Date().toISOString();
         return structuredClone(item);
       },
       delete: async (id) => {
@@ -185,6 +194,7 @@ export function installBrowserPreviewApi(): void {
       openMain: () => undefined,
       closePopup: () => undefined,
       pinPopup: () => undefined,
+      adaptPopupHeight: () => undefined,
       onPopupPayload: () => () => undefined,
       onNavigate: () => () => undefined
     }

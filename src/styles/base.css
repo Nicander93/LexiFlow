@@ -98,6 +98,7 @@ label,
 .page-enter-active, .page-leave-active { transition: opacity .18s ease, transform .22s var(--ease-spring); }
 .page-enter-from { opacity: 0; transform: translateY(5px); }
 .page-leave-to { opacity: 0; transform: translateY(-3px); }
+.page-leave-active { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

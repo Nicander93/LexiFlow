@@ -1,8 +1,16 @@
 import { app } from "electron";
 import { join } from "node:path";
-import type { HistorySettings, TranslationHistory } from "../../shared/types";
+import type { HistoryRevisionUpdate, HistorySettings, TranslationHistory } from "../../shared/types";
 import { JsonStore } from "./json-store";
-import { applyHistoryRetention, HISTORY_SCHEMA_VERSION, migrateHistory, normalizeHistoryItem, searchHistory, type StoredHistory } from "./history-policy";
+import {
+  applyHistoryRetention,
+  HISTORY_SCHEMA_VERSION,
+  mergeHistoryRevisions,
+  migrateHistory,
+  normalizeHistoryItem,
+  searchHistory,
+  type StoredHistory
+} from "./history-policy";
 
 export class HistoryStore {
   private store!: JsonStore<StoredHistory>;
@@ -29,6 +37,11 @@ export class HistoryStore {
     return structuredClone(this.items);
   }
 
+  get(id: string): TranslationHistory | undefined {
+    const item = this.items.find((candidate) => candidate.id === id);
+    return item && structuredClone(item);
+  }
+
   search(query: string): TranslationHistory[] {
     return structuredClone(searchHistory(this.items, query));
   }
@@ -44,6 +57,15 @@ export class HistoryStore {
     if (!settings.enabled) return;
     this.items = applyHistoryRetention([normalizeHistoryItem(item), ...this.items], settings).slice(0, settings.maxItems);
     await this.persist();
+  }
+
+  async updateRevisions(update: HistoryRevisionUpdate): Promise<TranslationHistory | undefined> {
+    const index = this.items.findIndex((item) => item.id === update.id);
+    if (index < 0) return undefined;
+    const next = mergeHistoryRevisions(this.items[index]!, update);
+    this.items[index] = next;
+    await this.persist();
+    return structuredClone(next);
   }
 
   async toggleFavorite(id: string): Promise<TranslationHistory | undefined> {

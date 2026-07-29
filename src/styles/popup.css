@@ -20,6 +20,7 @@
 .popup-manual textarea { flex: 1; resize: none; }
 .popup-manual button { align-self: flex-end; }
 .popup-error { margin: 12px; padding: 12px; border-radius: 12px; font-size: 11px; }
+.popup-warning { margin: 8px 12px 0; padding: 10px 12px; border-radius: 12px; font-size: 11px; }
 .popup-candidates { display: grid; gap: 7px; padding: 10px; }
 .popup-candidates button { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; text-align: left; background: rgba(255,255,255,.88); transition: .18s ease; }
 .popup-candidates button:hover { border-color: rgba(22,119,255,.28); background: var(--accent-faint); transform: translateY(-1px); }

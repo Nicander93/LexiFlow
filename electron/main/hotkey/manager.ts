@@ -1,7 +1,7 @@
 import { globalShortcut } from "electron";
-import type { ShortcutRegistrationResult, ShortcutSettings, TranslationMode } from "../../shared/types";
+import type { ShortcutRegistrationResult, ShortcutSettings } from "../../shared/types";
 
-type HotkeyAction = TranslationMode | "ocr";
+export type HotkeyAction = "translate" | "naming" | "ocr";
 
 export class HotkeyManager {
   private lastTriggeredAt = 0;
@@ -17,7 +17,7 @@ export class HotkeyManager {
       this.lastTriggeredAt = now;
       this.onTrigger(action);
     };
-    const translation = globalShortcut.register(settings.translation, () => trigger("technical"));
+    const translation = globalShortcut.register(settings.translation, () => trigger("translate"));
     const naming = globalShortcut.register(settings.naming, () => trigger("naming"));
     const screenshot = globalShortcut.register(settings.screenshot, () => trigger("ocr"));
     const errors: string[] = [];

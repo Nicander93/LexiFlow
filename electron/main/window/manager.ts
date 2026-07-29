@@ -2,6 +2,7 @@ import { app, BrowserWindow, screen } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { IPC_CHANNELS, type PopupPayload } from "../../shared/types";
+import { configureNavigationSecurity } from "../ipc/security";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 
@@ -10,10 +11,13 @@ export class WindowManager {
   private popupWindow: BrowserWindow | null = null;
   private popupPinned = false;
   private isQuitting = false;
+  private rememberingBounds = false;
 
   constructor(
     private readonly getCloseAction: () => "hide" | "quit",
-    private readonly shouldAutoHidePopup: () => boolean
+    private readonly shouldAutoHidePopup: () => boolean,
+    private readonly getPopupBounds: () => { width: number; height: number } | undefined = () => undefined,
+    private readonly savePopupBounds: (bounds: { width: number; height: number }) => void = () => undefined
   ) {}
 
   setQuitting(value: boolean): void {
@@ -27,11 +31,10 @@ export class WindowManager {
         preload: join(moduleDirectory, "../preload/index.cjs"),
         contextIsolation: true,
         nodeIntegration: false,
-        // Playwright's isolated Windows runner cannot launch Chromium's sandboxed
-        // renderer (exit 49). Production always remains sandboxed.
         sandbox: process.env.LEXIFLOW_E2E !== "1"
       }
     });
+    configureNavigationSecurity(window);
     window.webContents.on("preload-error", (_event, preloadPath, error) => {
       console.error(`Preload failed: ${preloadPath}`, error.message);
     });
@@ -95,14 +98,21 @@ export class WindowManager {
     window.webContents.send(IPC_CHANNELS.ocrCaptureRequested);
   }
 
+  private maxPopupHeight(display = screen.getPrimaryDisplay()): number {
+    return Math.max(320, Math.floor(display.workArea.height * 0.85));
+  }
+
   async ensurePopupWindow(): Promise<BrowserWindow> {
     if (this.popupWindow && !this.popupWindow.isDestroyed()) return this.popupWindow;
+    const saved = this.getPopupBounds();
+    const width = Math.min(720, Math.max(360, saved?.width ?? 480));
+    const height = Math.min(this.maxPopupHeight(), Math.max(240, saved?.height ?? 420));
     const window = this.createWindow({
-      width: 480,
-      height: 420,
+      width,
+      height,
       minWidth: 360,
       minHeight: 240,
-      maxHeight: 500,
+      maxHeight: this.maxPopupHeight(),
       show: false,
       frame: false,
       transparent: false,
@@ -115,6 +125,14 @@ export class WindowManager {
     window.on("blur", () => {
       if (!this.popupPinned && this.shouldAutoHidePopup()) window.hide();
     });
+    const remember = (): void => {
+      if (this.rememberingBounds || !this.popupWindow || this.popupWindow.isDestroyed()) return;
+      this.rememberingBounds = true;
+      const [nextWidth, nextHeight] = this.popupWindow.getSize();
+      this.savePopupBounds({ width: nextWidth, height: nextHeight });
+      this.rememberingBounds = false;
+    };
+    window.on("resized", remember);
     window.on("closed", () => {
       this.popupWindow = null;
     });
@@ -122,8 +140,22 @@ export class WindowManager {
     return window;
   }
 
+  /** 按内容类型调整高度：词典紧凑，长文本抬高。 */
+  adaptPopupHeight(kind: "dictionary" | "translation" | "naming" | "default" = "default"): void {
+    if (!this.popupWindow || this.popupWindow.isDestroyed()) return;
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const maxHeight = this.maxPopupHeight(display);
+    const [width] = this.popupWindow.getSize();
+    const height = kind === "dictionary" ? 320 : kind === "naming" ? 380 : kind === "translation" ? Math.min(maxHeight, 560) : Math.min(maxHeight, 420);
+    this.popupWindow.setMaximumSize(1200, maxHeight);
+    this.popupWindow.setSize(width, height, false);
+  }
+
   async showPopup(payload: PopupPayload): Promise<void> {
     const window = await this.ensurePopupWindow();
+    const kind = payload.mode === "naming" ? "naming" : "translation";
+    this.adaptPopupHeight(kind);
     const cursor = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursor);
     const bounds = display.workArea;

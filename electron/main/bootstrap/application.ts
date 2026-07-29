@@ -6,6 +6,7 @@
 import { app } from "electron";
 import type { AppSettings, TranslationMode } from "../../shared/types";
 import { captureSelectedText } from "../clipboard/selection";
+import { modeShortcutForProfile } from "../core/translation-policy";
 import { HotkeyManager } from "../hotkey/manager";
 import { registerIpcHandlers } from "../ipc/register";
 import { HistoryStore } from "../storage/history";
@@ -35,22 +36,37 @@ export async function bootstrapApplication(): Promise<void> {
 
   const windowManager = new WindowManager(
     () => settingsStore.get().window.closeAction,
-    () => settingsStore.get().window.autoHidePopup
+    () => settingsStore.get().window.autoHidePopup,
+    () => settingsStore.get().window.popupBounds,
+    (bounds) => {
+      const settings = settingsStore.get();
+      settings.window.popupBounds = bounds;
+      void settingsStore.update(settings);
+    }
   );
   const translationManager = new TranslationManager(settingsStore, historyStore, glossaryStore, profileStore);
   const documentManager = new DocumentManager(documentStore, profileStore, settingsStore, glossaryStore);
   const ocrService = new WindowsOcrService();
 
-  const triggerSelection = async (mode: TranslationMode): Promise<void> => {
-    await windowManager.showPopup({ mode, capturing: true });
+  const triggerSelection = async (mode: TranslationMode, profileId?: string): Promise<void> => {
+    const resolvedProfileId = mode === "naming"
+      ? undefined
+      : (profileId ?? settingsStore.get().shortcuts.defaultTranslationProfileId) || "technical";
+    await windowManager.showPopup({ mode, profileId: resolvedProfileId, capturing: true });
     translationManager.cancel();
     const selection = await captureSelectedText(settingsStore.get().translation.maxInputLength);
-    await windowManager.showPopup({ mode, text: selection.text, error: selection.error });
+    await windowManager.showPopup({ mode, profileId: resolvedProfileId, text: selection.text, error: selection.error });
+  };
+
+  const triggerQuickTranslate = async (): Promise<void> => {
+    const profileId = settingsStore.get().shortcuts.defaultTranslationProfileId || "technical";
+    await triggerSelection(modeShortcutForProfile(profileId), profileId);
   };
 
   const hotkeyManager = new HotkeyManager((action) => {
     if (action === "ocr") void windowManager.requestOcrCapture();
-    else void triggerSelection(action);
+    else if (action === "naming") void triggerSelection("naming");
+    else void triggerQuickTranslate();
   });
   let trayManager: TrayManager;
 
@@ -62,13 +78,15 @@ export async function bootstrapApplication(): Promise<void> {
   };
   const clearLocalData = async (): Promise<void> => {
     translationManager.cancel();
+    await documentManager.cancelAll();
     await Promise.all([historyStore.clear(), glossaryStore.clear(), profileStore.clear(), documentStore.clear(), settingsStore.reset()]);
+    documentManager.resumeAccepting();
     applySettings(settingsStore.get());
   };
 
   trayManager = new TrayManager({
     openMain: () => void windowManager.showMainWindow(),
-    quickTranslate: () => void triggerSelection("technical"),
+    quickTranslate: () => void triggerQuickTranslate(),
     naming: () => void triggerSelection("naming"),
     screenshot: () => void windowManager.requestOcrCapture(),
     openSettings: () => void windowManager.showMainWindow("/settings"),
@@ -103,18 +121,26 @@ export async function bootstrapApplication(): Promise<void> {
   app.on("activate", () => void windowManager.showMainWindow());
   app.on("second-instance", () => void windowManager.showMainWindow());
   let clearingExitHistory = false;
+  let disposingOnQuit = false;
   app.on("before-quit", (event) => {
-    if (settingsStore.get().history.retention === "clear-on-exit" && !clearingExitHistory) {
-      event.preventDefault();
-      clearingExitHistory = true;
-      void historyStore.clear().finally(() => app.quit());
+    if (disposingOnQuit) {
+      windowManager.setQuitting(true);
+      dictionaryService.close();
+      hotkeyManager.unregister();
+      trayManager.destroy();
       return;
     }
-    windowManager.setQuitting(true);
-    translationManager.cancel();
-    dictionaryService.close();
-    hotkeyManager.unregister();
-    trayManager.destroy();
+    event.preventDefault();
+    disposingOnQuit = true;
+    void (async () => {
+      translationManager.cancel();
+      await documentManager.dispose();
+      if (settingsStore.get().history.retention === "clear-on-exit" && !clearingExitHistory) {
+        clearingExitHistory = true;
+        await historyStore.clear().catch(() => undefined);
+      }
+      app.quit();
+    })();
   });
 
   // LexiFlow is a tray application, so closing every window must not end the process.

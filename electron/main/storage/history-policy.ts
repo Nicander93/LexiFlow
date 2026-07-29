@@ -1,6 +1,6 @@
-import type { HistorySettings, TranslationHistory } from "../../shared/types";
+import type { HistoryRevisionUpdate, HistorySettings, SegmentRevision, TranslationHistory, TranslationSegment } from "../../shared/types";
 
-export const HISTORY_SCHEMA_VERSION = 1;
+export const HISTORY_SCHEMA_VERSION = 2;
 
 export interface StoredHistory {
   schemaVersion: number;
@@ -13,11 +13,47 @@ const RETENTION_MS: Record<Exclude<HistorySettings["retention"], "forever" | "cl
 };
 
 export function normalizeHistoryItem(item: TranslationHistory): TranslationHistory {
-  return { ...item, isFavorite: Boolean(item.isFavorite) };
+  const originalSourceText = item.originalSourceText ?? item.sourceText;
+  const originalResultText = item.originalResultText ?? item.resultText;
+  return {
+    ...item,
+    originalSourceText,
+    originalResultText,
+    isFavorite: Boolean(item.isFavorite),
+    revisions: Array.isArray(item.revisions) ? item.revisions : [],
+    segments: Array.isArray(item.segments) ? item.segments : undefined,
+    updatedAt: item.updatedAt ?? item.createdAt
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function migrateRevisions(value: unknown): SegmentRevision[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is SegmentRevision => {
+    if (!isRecord(item)) return false;
+    return typeof item.id === "string"
+      && typeof item.segmentId === "string"
+      && typeof item.previousTarget === "string"
+      && typeof item.newTarget === "string"
+      && typeof item.instruction === "string"
+      && typeof item.createdAt === "number";
+  });
+}
+
+function migrateSegments(value: unknown): TranslationSegment[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const segments = value.filter((item): item is TranslationSegment => {
+    if (!isRecord(item)) return false;
+    return typeof item.id === "string"
+      && typeof item.source === "string"
+      && typeof item.target === "string"
+      && typeof item.sourceStart === "number"
+      && typeof item.sourceEnd === "number";
+  });
+  return segments.length ? segments : undefined;
 }
 
 function migrateHistoryItem(value: unknown): TranslationHistory | undefined {
@@ -37,23 +73,37 @@ function migrateHistoryItem(value: unknown): TranslationHistory | undefined {
   return normalizeHistoryItem({
     id: value.id,
     sourceText: value.sourceText,
+    originalSourceText: typeof value.originalSourceText === "string" ? value.originalSourceText : value.sourceText,
     resultText,
+    originalResultText: typeof value.originalResultText === "string" ? value.originalResultText : resultText,
     mode: value.mode,
+    profileId: typeof value.profileId === "string" ? value.profileId : undefined,
     sourceLanguage: typeof value.sourceLanguage === "string" ? value.sourceLanguage : undefined,
     targetLanguage: value.targetLanguage,
     provider: value.provider,
     model: value.model,
+    promptVersion: typeof value.promptVersion === "string" ? value.promptVersion : undefined,
     createdAt: value.createdAt,
-    isFavorite: Boolean(value.isFavorite)
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : value.createdAt,
+    isFavorite: Boolean(value.isFavorite),
+    revisions: migrateRevisions(value.revisions),
+    segments: migrateSegments(value.segments)
   });
 }
 
-/** Converts the pre-V2 array format and legacy `targetText` field without losing valid entries. */
+/** Converts legacy array / v1 items into Session-capable history without dropping valid entries. */
 export function migrateHistory(raw: unknown): { data: StoredHistory; migrated: boolean } {
-  const isVersioned = isRecord(raw) && Array.isArray(raw.items) && raw.schemaVersion === HISTORY_SCHEMA_VERSION;
+  const isCurrent = isRecord(raw) && Array.isArray(raw.items) && raw.schemaVersion === HISTORY_SCHEMA_VERSION;
   const sourceItems = Array.isArray(raw) ? raw : isRecord(raw) && Array.isArray(raw.items) ? raw.items : [];
   const items = sourceItems.map(migrateHistoryItem).filter((item): item is TranslationHistory => Boolean(item));
-  const migrated = !isVersioned || items.length !== sourceItems.length || sourceItems.some((item) => isRecord(item) && (typeof item.resultText !== "string" || typeof item.isFavorite !== "boolean"));
+  const migrated = !isCurrent
+    || items.length !== sourceItems.length
+    || sourceItems.some((item) => isRecord(item) && (
+      typeof item.resultText !== "string"
+      || typeof item.isFavorite !== "boolean"
+      || typeof item.originalSourceText !== "string"
+      || !Array.isArray(item.revisions)
+    ));
   return { data: { schemaVersion: HISTORY_SCHEMA_VERSION, items }, migrated };
 }
 
@@ -72,6 +122,35 @@ export function searchHistory(items: TranslationHistory[], query: string): Trans
   const normalized = query.trim().toLocaleLowerCase();
   if (!normalized) return structuredClone(items);
   return items.filter((item) =>
-    item.sourceText.toLocaleLowerCase().includes(normalized) || item.resultText.toLocaleLowerCase().includes(normalized)
+    item.sourceText.toLocaleLowerCase().includes(normalized)
+    || (item.originalSourceText ?? "").toLocaleLowerCase().includes(normalized)
+    || item.resultText.toLocaleLowerCase().includes(normalized)
   );
+}
+
+export function applyRevisionsToSegments(
+  segments: TranslationSegment[] | undefined,
+  revisions: SegmentRevision[]
+): TranslationSegment[] {
+  if (!segments?.length) return [];
+  return segments.map((segment) => {
+    const revision = [...revisions].reverse().find((item) => item.segmentId === segment.id);
+    return revision ? { ...segment, target: revision.newTarget } : segment;
+  });
+}
+
+export function finalTextFromSession(item: Pick<TranslationHistory, "resultText" | "segments" | "revisions">): string {
+  const segments = applyRevisionsToSegments(item.segments, item.revisions ?? []);
+  if (segments.length) return segments.map((segment) => segment.target).join("\n");
+  return item.resultText;
+}
+
+export function mergeHistoryRevisions(item: TranslationHistory, update: HistoryRevisionUpdate): TranslationHistory {
+  const revisions = update.revisions;
+  return normalizeHistoryItem({
+    ...item,
+    revisions,
+    resultText: update.resultText,
+    updatedAt: new Date().toISOString()
+  });
 }

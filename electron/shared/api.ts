@@ -32,6 +32,7 @@ import type {
   ShortcutRegistrationResult,
   TranslationEvent,
   TranslationHistory,
+  HistoryRevisionUpdate,
   TranslationRequest
 } from "./types";
 
@@ -70,8 +71,10 @@ export interface TranslatorApi {
   };
   history: {
     list: () => Promise<TranslationHistory[]>;
+    get: (id: string) => Promise<TranslationHistory | undefined>;
     search: (query: string) => Promise<TranslationHistory[]>;
     toggleFavorite: (id: string) => Promise<TranslationHistory | undefined>;
+    updateRevisions: (update: HistoryRevisionUpdate) => Promise<TranslationHistory | undefined>;
     delete: (id: string) => Promise<void>;
     clear: () => Promise<void>;
   };
@@ -121,6 +124,7 @@ export interface TranslatorApi {
     openMain: (route?: string) => void;
     closePopup: () => void;
     pinPopup: (pinned: boolean) => void;
+    adaptPopupHeight: (kind?: "dictionary" | "translation" | "naming" | "default") => void;
     onPopupPayload: (listener: (payload: PopupPayload) => void) => () => void;
     onNavigate: (listener: (route: string) => void) => () => void;
   };

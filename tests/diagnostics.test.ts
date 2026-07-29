@@ -18,6 +18,7 @@ describe("脱敏诊断导出", () => {
     expect(report.schemaVersion).toBe(1);
     expect(report.appVersion).toBe("0.1.0");
     expect(report.structuredParseFailures).toEqual({ "segments:invalid-json": 1 });
+    expect(report.nonFatalErrors).toEqual({});
     const serialized = JSON.stringify(report);
     expect(serialized).not.toMatch(/apiKey|sourceText|targetText|password/i);
     expect(report.notes.some((note) => note.includes("不含原文"))).toBe(true);

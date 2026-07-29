@@ -1,7 +1,7 @@
 import type { AppSettings } from "./types";
 
 /** 与结构化输出 / 历史条目绑定；改 prompt 规则或 JSON schema 时递增。 */
-export const PROMPT_VERSION = "v3.1";
+export const PROMPT_VERSION = "v3.2";
 
 export const DEFAULT_PROMPTS = {
   normal: `你是一个专业翻译工具。请将输入内容翻译为目标语言。
@@ -41,7 +41,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     translation: "Ctrl+Alt+T",
     naming: "Ctrl+Alt+N",
     screenshot: "Ctrl+Alt+S",
-    paused: false
+    paused: false,
+    defaultTranslationProfileId: "technical"
   },
   translation: {
     targetLanguage: "auto",

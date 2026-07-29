@@ -1,3 +1,5 @@
+import type { CleanupAction, PreparedTranslationInput } from "../../shared/types";
+
 export interface TextCleanupOptions {
   preserveOriginalLineBreaks: boolean;
   protectCodeBlocks: boolean;
@@ -56,10 +58,37 @@ function joinWrappedLines(lines: string[]): string[] {
 
 /** Normalizes copied text while keeping paragraphs, Markdown structure and fenced code intact. 规范化粘贴文本；可关折行合并，或保护代码块后再还原。 */
 export function cleanInputText(text: string, options: TextCleanupOptions): string {
-  const normalized = text.replace(/\r\n?/g, "\n").replace(/[\u200B\u200C\u200D\uFEFF]/g, "").replace(/\u3000/g, " ");
-  const protectedValue = options.protectCodeBlocks ? protectCodeBlocks(normalized) : { text: normalized, restore: (value: string) => value };
-  const cleaned = options.preserveOriginalLineBreaks
-    ? protectedValue.text
-    : joinWrappedLines(protectedValue.text.split("\n")).join("\n").replace(/\n{3,}/g, "\n\n");
-  return protectedValue.restore(cleaned).trim();
+  return prepareTranslationInput(text, options).normalizedText;
+}
+
+/** 保留原始文本与清理动作，供 UI 追溯与撤销。 */
+export function prepareTranslationInput(text: string, options: TextCleanupOptions): PreparedTranslationInput {
+  const actions: CleanupAction[] = [];
+  const withBreaks = text.replace(/\r\n?/g, "\n");
+  if (withBreaks !== text) {
+    actions.push({ type: "normalize-line-breaks", description: "统一换行符" });
+  }
+  const withoutZw = withBreaks.replace(/[\u200B\u200C\u200D\uFEFF]/g, "").replace(/\u3000/g, " ");
+  if (withoutZw !== withBreaks) {
+    actions.push({ type: "normalize-spaces", description: "规范化空白字符" });
+  }
+  const hadCodeBlock = options.protectCodeBlocks && /```[\s\S]*?```/.test(withoutZw);
+  const protectedValue = options.protectCodeBlocks ? protectCodeBlocks(withoutZw) : { text: withoutZw, restore: (value: string) => value };
+  if (hadCodeBlock) {
+    actions.push({ type: "protect-code-block", description: "保护代码块" });
+  }
+  let cleaned = protectedValue.text;
+  if (!options.preserveOriginalLineBreaks) {
+    const joined = joinWrappedLines(protectedValue.text.split("\n")).join("\n").replace(/\n{3,}/g, "\n\n");
+    if (joined !== protectedValue.text) {
+      actions.push({ type: "remove-soft-wraps", description: "已自动整理网页换行" });
+    }
+    cleaned = joined;
+  }
+  const normalizedText = protectedValue.restore(cleaned).trim() || text;
+  return {
+    originalText: text,
+    normalizedText,
+    cleanupActions: normalizedText === text ? [] : actions
+  };
 }

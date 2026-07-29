@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from "vue";
 import PageHeader from "../components/PageHeader.vue";
 import ResultPanel from "../components/ResultPanel.vue";
-import SegmentedText from "../components/SegmentedText.vue";
 import AppIcon from "../components/AppIcon.vue";
 import DictionaryCard from "../components/dictionary/DictionaryCard.vue";
 import { useTranslation } from "../composables/useTranslation";
 import { useDictionary } from "../composables/useDictionary";
-import type { DictionaryLookupResult, OcrResult, OcrScreen, SegmentAlternative, SegmentRevision, TargetLanguage, TranslationMode, TranslationProfile, TranslationQualityIssue, TranslationSegment } from "../../electron/shared/types";
+import { useOcrCapture } from "../composables/useOcrCapture";
+import { useSegmentRevision } from "../composables/useSegmentRevision";
+import type { DictionaryLookupResult, SegmentRevision, TargetLanguage, TranslationMode, TranslationProfile, TranslationQualityIssue, TranslationSegment } from "../../electron/shared/types";
 import { pickTargetDictionaryQuery, shouldLookupDictionary } from "../../electron/shared/dictionary-eligibility";
 import { getTranslatorApi } from "../platform/translator";
 import { checkTranslationQuality } from "../../electron/shared/quality";
@@ -23,13 +24,35 @@ const maxInputLength = ref(10_000);
 const providerLabel = ref("本地模型");
 const profiles = ref<TranslationProfile[]>([]);
 const profileId = ref("general");
-const { status, resultText, result, errorMessage, isRunning, start, stop, retry, reset } = useTranslation();
+const PROFILE_SHORTCUTS = [
+  { id: "general", label: "通用" },
+  { id: "technical", label: "技术" },
+  { id: "academic", label: "学术" }
+] as const;
+
+function selectProfileShortcut(id: string): void {
+  profileId.value = id;
+  mode.value = id === "technical" || id === "code-comment" ? "technical" : "normal";
+}
+
+function onProfileChange(): void {
+  mode.value = profileId.value === "technical" || profileId.value === "code-comment" ? "technical" : "normal";
+}
+
+const { status, resultText, result, errorMessage, warningMessage, historyId, isRunning, start, stop, retry, reset } = useTranslation();
+const showOriginalText = ref(false);
+const cleanupDismissed = ref(false);
+const cleanupNotice = computed(() => {
+  if (cleanupDismissed.value || !result.value?.cleanupActions?.length) return "";
+  return result.value.cleanupActions.find((item) => item.type === "remove-soft-wraps")?.description
+    ?? result.value.cleanupActions[0]?.description
+    ?? "已自动整理原文";
+});
 const { status: dictionaryStatus, result: autoDictionaryResult, lookup: lookupAutoDictionary, reset: resetAutoDictionary } = useDictionary(220);
 const resultView = ref<ResultView>("translation");
 const lastTranslatedSource = ref("");
 const hoveredSegmentId = ref<string>();
 const lockedSegmentId = ref<string>();
-const sourceEditorVisible = ref(true);
 const sourceTextarea = ref<HTMLTextAreaElement>();
 const segmentDictionary = ref<DictionaryLookupResult | null>(null);
 const dictionaryTerm = ref("");
@@ -41,35 +64,62 @@ const dictionaryContextText = ref("");
 const dictionaryContextError = ref("");
 const dictionaryContextLoading = ref(false);
 const dictionaryContextRequestId = ref<string>();
-const revisions = ref<SegmentRevision[]>([]);
-const revisionStatus = ref<"idle" | "loading" | "error">("idle");
-const revisionError = ref("");
-const revisionNotice = ref("");
-const customRevisionInstruction = ref("");
-const revisionRequestId = ref<string>();
-const alternatives = ref<SegmentAlternative[]>([]);
-const alternativesLoading = ref(false);
-const alternativesRequestId = ref<string>();
 const qualityIssues = ref<TranslationQualityIssue[]>([]);
-const ocrResult = ref<OcrResult>();
-const ocrLoading = ref(false);
-const ocrError = ref("");
-const ocrScreens = ref<OcrScreen[]>([]);
-const ocrScreenId = ref<string>();
-const ocrImage = ref<HTMLElement>();
-const ocrSelection = ref<{ startX: number; startY: number; endX: number; endY: number }>();
-const selectingOcr = ref(false);
-const ocrEditedText = ref("");
 const glossaryFromDictionary = ref({ sourceTerm: "", targetTerm: "" });
 const glossaryFromDictionaryNotice = ref("");
-const activeSegmentId = computed(() => lockedSegmentId.value ?? hoveredSegmentId.value);
-const hasStructuredResult = computed(() => status.value === "success" && Boolean(result.value?.segments.length));
+
+let revisions!: Ref<SegmentRevision[]>;
 const displaySegments = computed<TranslationSegment[]>(() => (result.value?.segments ?? []).map((segment) => {
   const revision = [...revisions.value].reverse().find((item) => item.segmentId === segment.id);
   return revision ? { ...segment, target: revision.newTarget } : segment;
 }));
 const displayResultText = computed(() => displaySegments.value.length ? displaySegments.value.map((segment) => segment.target).join("\n") : resultText.value);
 const lockedSegment = computed(() => displaySegments.value.find((segment) => segment.id === lockedSegmentId.value));
+
+const {
+  revisions: revisionsFromComposable,
+  revisionStatus,
+  revisionError,
+  revisionNotice,
+  customRevisionInstruction,
+  alternatives,
+  alternativesLoading,
+  reviseSegment,
+  reviseWithCustomInstruction,
+  undoRevision,
+  requestAlternatives,
+  applyAlternative,
+  clearRevisions
+} = useSegmentRevision({ lockedSegment, lockedSegmentId, historyId, targetLanguage, profileId, displayResultText });
+revisions = revisionsFromComposable;
+
+function markCopied(): void {
+  copied.value = true;
+  setTimeout(() => (copied.value = false), 1200);
+}
+
+const {
+  ocrResult,
+  ocrLoading,
+  ocrError,
+  ocrScreens,
+  ocrScreenId,
+  ocrImage,
+  ocrSelection,
+  selectingOcr,
+  ocrEditedText,
+  ocrSelectionStyle,
+  captureOcr,
+  useOcrBlock,
+  applyOcrEditedText,
+  copyOcrText,
+  beginOcrSelection,
+  moveOcrSelection,
+  endOcrSelection
+} = useOcrCapture({ sourceText, onCopied: markCopied });
+
+const activeSegmentId = computed(() => lockedSegmentId.value ?? hoveredSegmentId.value);
+const hasStructuredResult = computed(() => Boolean(result.value?.segments.length) && (status.value === "success" || status.value === "streaming"));
 const dictionaryContext = computed(() => displaySegments.value.find((segment) => segment.id === dictionarySegmentId.value));
 const glossaryValidation = computed(() => result.value?.glossaryValidation ?? []);
 const dictionaryEligible = computed(() => shouldLookupDictionary(sourceText.value));
@@ -78,6 +128,7 @@ const showDictionaryTab = computed(() => dictionaryEligible.value);
 const primaryActionLabel = computed(() => (showDictionaryPane.value && resultView.value === "dictionary" ? "AI 翻译" : "开始翻译"));
 const showRevisionPopover = computed(() => Boolean(lockedSegment.value && hasStructuredResult.value));
 const showMainDictionary = computed(() => showDictionaryPane.value && resultView.value === "dictionary");
+const dictionarySuggestions = computed(() => autoDictionaryResult.value?.suggestions ?? []);
 
 function resizeSourceTextarea(): void {
   const el = sourceTextarea.value;
@@ -117,16 +168,20 @@ watch(status, (value) => {
   void lookupDictionary(query);
 });
 
-watch(sourceEditorVisible, (visible) => {
-  if (visible) void nextTick(resizeSourceTextarea);
-});
+function undoCleanupAndRetranslate(): void {
+  const original = result.value?.originalSourceText;
+  if (!original) return;
+  sourceText.value = original;
+  cleanupDismissed.value = true;
+  void translate();
+}
 
 async function translate(): Promise<void> {
-  sourceEditorVisible.value = false;
   hoveredSegmentId.value = undefined;
   lockedSegmentId.value = undefined;
-  revisions.value = [];
-  alternatives.value = [];
+  clearRevisions();
+  cleanupDismissed.value = false;
+  showOriginalText.value = false;
   closeDictionary();
   resultView.value = "translation";
   lastTranslatedSource.value = sourceText.value;
@@ -149,29 +204,33 @@ async function switchResultView(view: ResultView): Promise<void> {
   }
   await triggerAiTranslate();
 }
-async function reviseSegment(instruction: string): Promise<void> {
-  const segment = lockedSegment.value;
-  if (!segment || revisionStatus.value === "loading") return;
-  revisionStatus.value = "loading";
-  revisionError.value = "";
-  revisionNotice.value = "";
-  revisionRequestId.value = await translator.revision.start({
-    segment,
-    instruction,
-    targetLanguage: targetLanguage.value,
-    profileId: profileId.value
-  });
-}
+
 async function addActiveSegmentToGlossary(): Promise<void> {
   const segment = lockedSegment.value;
   if (!segment) return;
   try {
     const now = Date.now();
-    await translator.glossary.upsert({ id: crypto.randomUUID(), sourceTerm: segment.source, targetTerm: segment.target, sourceLanguage: "auto", targetLanguage: result.value?.targetLanguage ?? targetLanguage.value, domain: "翻译结果", caseSensitive: false, matchMode: "phrase", enabled: true, createdAt: now, updatedAt: now });
+    await translator.glossary.upsert({
+      id: crypto.randomUUID(),
+      sourceTerm: segment.source,
+      targetTerm: segment.target,
+      sourceLanguage: "auto",
+      targetLanguage: result.value?.targetLanguage ?? targetLanguage.value,
+      domain: "翻译结果",
+      caseSensitive: false,
+      matchMode: "phrase",
+      enabled: true,
+      createdAt: now,
+      updatedAt: now
+    });
     revisionError.value = "";
     revisionNotice.value = "已将当前句段加入本地术语表。";
-  } catch (error) { revisionNotice.value = ""; revisionError.value = error instanceof Error ? error.message : "加入术语表失败。"; }
+  } catch (error) {
+    revisionNotice.value = "";
+    revisionError.value = error instanceof Error ? error.message : "加入术语表失败。";
+  }
 }
+
 async function addDictionaryTermToGlossary(): Promise<void> {
   const sourceTerm = glossaryFromDictionary.value.sourceTerm.trim() || dictionaryTerm.value;
   const targetTerm = glossaryFromDictionary.value.targetTerm.trim();
@@ -199,76 +258,19 @@ async function addDictionaryTermToGlossary(): Promise<void> {
     glossaryFromDictionaryNotice.value = error instanceof Error ? error.message : "加入术语表失败。";
   }
 }
-async function reviseWithCustomInstruction(): Promise<void> {
-  const instruction = customRevisionInstruction.value.trim();
-  if (!instruction) { revisionError.value = "请输入自定义要求或指定词语。"; return; }
-  await reviseSegment(instruction);
-}
-function undoRevision(): void {
-  const segmentId = lockedSegmentId.value;
-  if (!segmentId) return;
-  const index = [...revisions.value].map((item) => item.segmentId).lastIndexOf(segmentId);
-  if (index >= 0) revisions.value.splice(index, 1);
-}
-async function requestAlternatives(): Promise<void> {
-  if (!lockedSegment.value || alternativesLoading.value) return;
-  alternatives.value = [];
-  alternativesLoading.value = true;
-  alternativesRequestId.value = await translator.alternatives.start({
-    segment: lockedSegment.value,
-    targetLanguage: targetLanguage.value,
-    profileId: profileId.value
+
+function runQualityCheck(): void {
+  qualityIssues.value = checkTranslationQuality(displaySegments.value, {
+    targetLanguage: result.value?.targetLanguage,
+    glossaryValidation: glossaryValidation.value
   });
 }
-function applyAlternative(alternative: SegmentAlternative): void {
-  const segment = lockedSegment.value;
-  if (!segment) return;
-  revisions.value.push({ id: alternative.id, segmentId: segment.id, previousTarget: segment.target, newTarget: alternative.target, instruction: alternative.label, createdAt: Date.now() });
-  alternatives.value = [];
+
+function closeOcr(): void {
+  ocrResult.value = undefined;
+  ocrSelection.value = undefined;
+  ocrEditedText.value = "";
 }
-function runQualityCheck(): void { qualityIssues.value = checkTranslationQuality(displaySegments.value, { targetLanguage: result.value?.targetLanguage, glossaryValidation: glossaryValidation.value }); }
-async function captureOcr(): Promise<void> { ocrLoading.value = true; ocrError.value = ""; try { const captured = await translator.ocr.captureScreen(ocrScreenId.value); ocrResult.value = captured; ocrEditedText.value = captured.text; sourceText.value = captured.text; sourceEditorVisible.value = true; } catch (error) { ocrError.value = error instanceof Error ? error.message : "OCR 识别失败。"; } finally { ocrLoading.value = false; } }
-function useOcrBlock(text: string): void { sourceText.value = text; ocrEditedText.value = text; sourceEditorVisible.value = true; }
-function applyOcrEditedText(): void {
-  if (!ocrEditedText.value.trim()) return;
-  sourceText.value = ocrEditedText.value;
-  sourceEditorVisible.value = true;
-}
-async function copyOcrText(): Promise<void> {
-  if (!ocrResult.value?.text) return;
-  await translator.clipboard.writeText(ocrResult.value.text);
-  copied.value = true;
-  setTimeout(() => (copied.value = false), 1200);
-}
-function pointInOcrImage(event: PointerEvent): { x: number; y: number } | undefined {
-  const bounds = ocrImage.value?.getBoundingClientRect();
-  if (!bounds || !bounds.width || !bounds.height) return undefined;
-  return { x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)), y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)) };
-}
-function beginOcrSelection(event: PointerEvent): void { const point = pointInOcrImage(event); if (!point) return; selectingOcr.value = true; ocrSelection.value = { startX: point.x, startY: point.y, endX: point.x, endY: point.y }; ocrImage.value?.setPointerCapture(event.pointerId); }
-function moveOcrSelection(event: PointerEvent): void { if (!selectingOcr.value || !ocrSelection.value) return; const point = pointInOcrImage(event); if (point) { ocrSelection.value.endX = point.x; ocrSelection.value.endY = point.y; } }
-function endOcrSelection(event: PointerEvent): void {
-  if (!selectingOcr.value || !ocrSelection.value || !ocrResult.value) return;
-  selectingOcr.value = false;
-  const point = pointInOcrImage(event); if (point) { ocrSelection.value.endX = point.x; ocrSelection.value.endY = point.y; }
-  const selection = ocrSelection.value;
-  if (Math.abs(selection.endX - selection.startX) < 0.01 || Math.abs(selection.endY - selection.startY) < 0.01) { ocrSelection.value = undefined; return; }
-  const left = Math.min(selection.startX, selection.endX) * ocrResult.value.imageWidth;
-  const right = Math.max(selection.startX, selection.endX) * ocrResult.value.imageWidth;
-  const top = Math.min(selection.startY, selection.endY) * ocrResult.value.imageHeight;
-  const bottom = Math.max(selection.startY, selection.endY) * ocrResult.value.imageHeight;
-  const text = ocrResult.value.blocks.filter((block) => {
-    const centerX = block.boundingBox.x + block.boundingBox.width / 2;
-    const centerY = block.boundingBox.y + block.boundingBox.height / 2;
-    return centerX >= left && centerX <= right && centerY >= top && centerY <= bottom;
-  }).map((block) => block.text).join("\n");
-  if (text) useOcrBlock(text);
-}
-const ocrSelectionStyle = computed(() => {
-  const value = ocrSelection.value; if (!value) return undefined;
-  const left = Math.min(value.startX, value.endX); const top = Math.min(value.startY, value.endY);
-  return { left: `${left * 100}%`, top: `${top * 100}%`, width: `${Math.abs(value.endX - value.startX) * 100}%`, height: `${Math.abs(value.endY - value.startY) * 100}%` };
-});
 
 function handleSegmentHover(id: string | undefined): void {
   if (!lockedSegmentId.value) hoveredSegmentId.value = id;
@@ -283,6 +285,7 @@ function clearSegmentLock(): void {
   lockedSegmentId.value = undefined;
   hoveredSegmentId.value = undefined;
 }
+
 function closeDictionary(): void {
   translator.dictionary.context.cancel(dictionaryContextRequestId.value);
   dictionaryTerm.value = "";
@@ -299,6 +302,7 @@ function navigateSegment(id: string): void {
   lockedSegmentId.value = id;
   hoveredSegmentId.value = undefined;
 }
+
 async function lookupDictionary(term: string, segmentId?: string): Promise<void> {
   translator.dictionary.context.cancel(dictionaryContextRequestId.value);
   dictionaryTerm.value = term;
@@ -345,20 +349,19 @@ async function lookupDictionary(term: string, segmentId?: string): Promise<void>
 async function copyResult(): Promise<void> {
   if (!resultText.value) return;
   await translator.clipboard.writeText(displayResultText.value);
-  copied.value = true;
-  setTimeout(() => (copied.value = false), 1200);
+  markCopied();
 }
+
 async function copySource(): Promise<void> {
   if (!sourceText.value) return;
   await translator.clipboard.writeText(sourceText.value);
-  copied.value = true;
-  setTimeout(() => (copied.value = false), 1200);
+  markCopied();
 }
+
 async function copyBilingual(): Promise<void> {
   if (!sourceText.value || !displayResultText.value) return;
   await translator.clipboard.writeText(`原文：${sourceText.value}\n\n译文：${displayResultText.value}`);
-  copied.value = true;
-  setTimeout(() => (copied.value = false), 1200);
+  markCopied();
 }
 
 onMounted(async () => {
@@ -368,48 +371,50 @@ onMounted(async () => {
   targetLanguage.value = settings.translation.targetLanguage;
   providerLabel.value = settings.provider.type === "ollama" ? "本地模型" : "远程模型";
   profiles.value = await translator.profiles.list();
-  try { ocrScreens.value = await translator.ocr.listScreens(); ocrScreenId.value = ocrScreens.value.find((item) => item.primary)?.id ?? ocrScreens.value[0]?.id; } catch { ocrScreens.value = []; }
 
   const pending = sessionStorage.getItem("lexiflow:retranslate");
   if (!pending) return;
   sessionStorage.removeItem("lexiflow:retranslate");
   try {
-    const history = JSON.parse(pending) as { sourceText: string; mode: TranslationMode; targetLanguage: TargetLanguage };
+    const history = JSON.parse(pending) as {
+      id?: string;
+      sourceText: string;
+      originalSourceText?: string;
+      resultText?: string;
+      mode: TranslationMode;
+      targetLanguage: TargetLanguage;
+      profileId?: string;
+      revisions?: SegmentRevision[];
+      segments?: TranslationSegment[];
+    };
     sourceText.value = history.sourceText;
     mode.value = history.mode === "naming" ? "normal" : history.mode;
+    profileId.value = history.profileId ?? (history.mode === "technical" ? "technical" : "general");
     targetLanguage.value = history.targetLanguage;
+    if (history.revisions?.length) revisions.value = history.revisions;
+    if (history.id) historyId.value = history.id;
+    if (history.segments?.length && history.resultText) {
+      result.value = {
+        requestId: history.id ?? "restored",
+        sourceText: history.sourceText,
+        originalSourceText: history.originalSourceText ?? history.sourceText,
+        targetText: history.resultText,
+        sourceLanguage: "",
+        targetLanguage: history.targetLanguage,
+        segments: history.segments,
+        modelInfo: { provider: "ollama", model: "", durationMs: 0 },
+        createdAt: Date.now()
+      };
+      resultText.value = history.resultText;
+      status.value = "success";
+      lastTranslatedSource.value = history.sourceText;
+    }
     void nextTick(resizeSourceTextarea);
   } catch {
     // Ignore malformed session data; it should never block the translation page.
   }
 });
 
-const removeRevisionListener = translator.revision.onEvent((event) => {
-  if (revisionRequestId.value && event.requestId !== revisionRequestId.value) return;
-  if (event.status === "loading") revisionStatus.value = "loading";
-  if (event.status === "success" && event.revision) {
-    revisions.value.push(event.revision);
-    revisionStatus.value = "idle";
-    revisionRequestId.value = undefined;
-  }
-  if (event.status === "error" || event.status === "cancelled") {
-    revisionStatus.value = "error";
-    revisionError.value = event.error ?? "局部重译失败。";
-    revisionRequestId.value = undefined;
-  }
-});
-onUnmounted(() => {
-  removeRevisionListener();
-});
-const removeAlternativesListener = translator.alternatives.onEvent((event) => {
-  if (alternativesRequestId.value && event.requestId !== alternativesRequestId.value) return;
-  alternativesLoading.value = event.status === "loading";
-  if (event.status === "success") { alternatives.value = event.alternatives ?? []; alternativesLoading.value = false; alternativesRequestId.value = undefined; }
-  if (event.status === "error" || event.status === "cancelled") { alternativesLoading.value = false; alternativesRequestId.value = undefined; }
-});
-onUnmounted(() => removeAlternativesListener());
-const removeOcrCaptureListener = translator.ocr.onCaptureRequested(() => { void captureOcr(); });
-onUnmounted(() => removeOcrCaptureListener());
 const removeDictionaryContextListener = translator.dictionary.context.onEvent((event) => {
   if (dictionaryContextRequestId.value && event.requestId !== dictionaryContextRequestId.value) return;
   dictionaryContextLoading.value = event.status === "loading";
@@ -435,17 +440,14 @@ onUnmounted(() => {
     <PageHeader title="翻译" class="translation-header">
       <template #leading>
         <div class="segmented">
-          <button :class="{ active: mode === 'normal' }" @click="mode = 'normal'">普通翻译</button>
-          <button :class="{ active: mode === 'technical' }" @click="mode = 'technical'">技术翻译</button>
+          <button v-for="item in PROFILE_SHORTCUTS" :key="item.id" :class="{ active: profileId === item.id }" @click="selectProfileShortcut(item.id)">{{ item.label }}</button>
         </div>
       </template>
       <div class="control-inline">
-        <label>目标语言
-          <select v-model="targetLanguage"><option value="auto">自动识别</option><option value="zh-CN">中文</option><option value="en">英文</option></select>
-        </label>
-        <label>Profile<select v-model="profileId"><option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option></select></label>
+        <label>目标语言<select v-model="targetLanguage"><option value="auto">自动识别</option><option value="zh-CN">中文</option><option value="en">英文</option></select></label>
+        <label>Profile<select v-model="profileId" @change="onProfileChange"><option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option></select></label>
       </div>
-      <select v-if="ocrScreens.length" v-model="ocrScreenId" class="ocr-screen-select" title="选择 OCR 截图屏幕"><option v-for="screen in ocrScreens" :key="screen.id" :value="screen.id">{{ screen.primary ? '主屏 · ' : '' }}{{ screen.name }}（{{ screen.width }}×{{ screen.height }}）</option></select><button class="text-button" :disabled="ocrLoading" @click="captureOcr">{{ ocrLoading ? 'OCR 识别中' : 'OCR 截图' }}</button><button v-if="hasStructuredResult" class="text-button" @click="runQualityCheck">质量检查</button><span v-if="copied" class="success-badge"><AppIcon name="check" :size="14" />已复制</span>
+      <span v-if="copied" class="success-badge"><AppIcon name="check" :size="14" />已复制</span>
       <span v-else class="status-chip">{{ providerLabel }}</span>
     </PageHeader>
     <section v-if="ocrResult || ocrError" class="ocr-card surface">
@@ -454,7 +456,7 @@ onUnmounted(() => {
         <div>
           <button v-if="ocrResult" class="text-button" :disabled="ocrLoading" @click="captureOcr">重新识别</button>
           <button v-if="ocrResult" class="text-button" @click="copyOcrText">复制原文</button>
-          <button v-if="ocrResult" class="text-button" @click="ocrResult = undefined; ocrSelection = undefined; ocrEditedText = ''">关闭</button>
+          <button v-if="ocrResult" class="text-button" @click="closeOcr">关闭</button>
         </div>
       </div>
       <div v-if="ocrError" class="error-message">{{ ocrError }}</div>
@@ -471,29 +473,23 @@ onUnmounted(() => {
     </section>
     <div class="translation-stack">
       <section class="input-panel surface">
-        <div class="panel-toolbar"><span>原文</span><button class="text-button" @click="hasStructuredResult ? sourceEditorVisible = true : sourceText = ''">{{ hasStructuredResult ? '编辑原文' : '清空' }}</button></div>
+        <div class="panel-toolbar">
+          <span>原文</span>
+          <div class="control-inline">
+            <select v-if="ocrScreens.length" v-model="ocrScreenId" class="ocr-screen-select" title="选择 OCR 截图屏幕"><option v-for="screen in ocrScreens" :key="screen.id" :value="screen.id">{{ screen.primary ? '主屏 · ' : '' }}{{ screen.name }}（{{ screen.width }}×{{ screen.height }}）</option></select>
+            <button class="text-button" :disabled="ocrLoading" @click="captureOcr">{{ ocrLoading ? 'OCR 识别中' : 'OCR 截图' }}</button>
+            <button v-if="sourceText" class="text-button" @click="sourceText = ''">清空</button>
+          </div>
+        </div>
+        <div v-if="cleanupNotice" class="cleanup-notice">
+          <span>{{ cleanupNotice }}</span>
+          <button class="text-button" @click="showOriginalText = !showOriginalText">{{ showOriginalText ? '查看整理后' : '查看原文' }}</button>
+          <button class="text-button" @click="undoCleanupAndRetranslate">撤销整理</button>
+          <button class="text-button" @click="cleanupDismissed = true">关闭</button>
+        </div>
+        <pre v-if="showOriginalText && result?.originalSourceText" class="cleanup-original">{{ result.originalSourceText }}</pre>
         <div class="source-body">
-          <SegmentedText
-            v-if="hasStructuredResult && !sourceEditorVisible && result"
-            side="source"
-            :segments="displaySegments"
-            :active-id="activeSegmentId"
-            @hover="handleSegmentHover"
-            @toggle="toggleSegment"
-            @clear="clearSegmentLock"
-            @navigate="navigateSegment"
-            @select-term="lookupDictionary"
-          />
-          <textarea
-            v-else
-            ref="sourceTextarea"
-            v-model="sourceText"
-            autofocus
-            rows="1"
-            placeholder="输入或粘贴文本，Ctrl + Enter 执行"
-            @input="resizeSourceTextarea"
-            @keydown.ctrl.enter.prevent="translate"
-          />
+          <textarea ref="sourceTextarea" v-model="sourceText" autofocus rows="1" placeholder="输入或粘贴文本，Ctrl + Enter 执行" @input="resizeSourceTextarea" @keydown.ctrl.enter.prevent="translate" />
         </div>
         <div class="input-footer"><span>{{ sourceText.length.toLocaleString() }} / {{ maxInputLength.toLocaleString() }}</span><button class="primary-button" :disabled="isRunning" @click="triggerAiTranslate">{{ primaryActionLabel }}</button></div>
       </section>
@@ -503,36 +499,16 @@ onUnmounted(() => {
             <button :class="{ active: showMainDictionary }" :disabled="!showDictionaryTab" @click="switchResultView('dictionary')">词典</button>
             <button :class="{ active: !showMainDictionary }" @click="switchResultView('translation')">AI 翻译</button>
           </div>
+          <button v-if="hasStructuredResult" class="text-button" @click="runQualityCheck">质量检查</button>
         </div>
         <div class="result-stack-body">
           <template v-if="showMainDictionary">
-            <DictionaryCard
-              v-if="autoDictionaryResult?.entry"
-              :entry="autoDictionaryResult.entry"
-              @ai-translate="triggerAiTranslate"
-            />
+            <DictionaryCard v-if="autoDictionaryResult?.entry" :entry="autoDictionaryResult.entry" @ai-translate="triggerAiTranslate" />
           </template>
           <template v-else>
-            <p v-if="dictionaryStatus === 'not-found' && dictionaryEligible" class="dictionary-hint muted">本地词典未收录，将使用模型翻译。</p>
+            <p v-if="dictionaryStatus === 'not-found' && dictionaryEligible" class="dictionary-hint muted">本地词典未收录，将使用模型翻译。<span v-if="dictionarySuggestions.length">建议：{{ dictionarySuggestions.join('、') }}</span></p>
             <p v-else-if="dictionaryStatus === 'unavailable'" class="dictionary-hint muted">{{ autoDictionaryResult?.unavailableReason || '本地词典资源不可用，仍可使用 AI 翻译。' }}</p>
-            <ResultPanel
-              :status="status"
-              :text="displayResultText"
-              :source-text="sourceText"
-              :error="errorMessage"
-              :segments="displaySegments"
-              :active-segment-id="activeSegmentId"
-              @copy="copyResult"
-              @copy-source="copySource"
-              @copy-bilingual="copyBilingual"
-              @stop="stop"
-              @retry="retry"
-              @hover="handleSegmentHover"
-              @toggle="toggleSegment"
-              @clear="clearSegmentLock"
-              @navigate="navigateSegment"
-              @select-term="lookupDictionary"
-            />
+            <ResultPanel :status="status" :text="displayResultText" :source-text="sourceText" :error="errorMessage" :warning="warningMessage" :segments="displaySegments" :active-segment-id="activeSegmentId" @copy="copyResult" @copy-source="copySource" @copy-bilingual="copyBilingual" @stop="stop" @retry="retry" @hover="handleSegmentHover" @toggle="toggleSegment" @clear="clearSegmentLock" @navigate="navigateSegment" @select-term="lookupDictionary" />
           </template>
           <section v-if="dictionaryTerm" ref="dictionaryCard" class="dictionary-card surface" aria-live="polite">
             <div class="panel-toolbar"><span>词典 · {{ dictionaryTerm }}</span><button class="text-button" @click="closeDictionary">关闭</button></div>
@@ -543,16 +519,13 @@ onUnmounted(() => {
               <div v-if="dictionaryContextLoading || dictionaryContextText || dictionaryContextError" class="dictionary-context"><small>模型补充解释</small><p v-if="dictionaryContextLoading" class="muted">正在补充释义…</p><p v-else-if="dictionaryContextText">{{ dictionaryContextText }}</p><p v-else class="error-text">{{ dictionaryContextError }}</p></div>
               <div class="dictionary-glossary">
                 <small>加入术语表前请确认源词与目标词（不要直接把整段释义当译文）</small>
-                <div class="form-grid">
-                  <label>源词<input v-model="glossaryFromDictionary.sourceTerm" /></label>
-                  <label>目标词<input v-model="glossaryFromDictionary.targetTerm" placeholder="固定译法" /></label>
-                </div>
+                <div class="form-grid"><label>源词<input v-model="glossaryFromDictionary.sourceTerm" /></label><label>目标词<input v-model="glossaryFromDictionary.targetTerm" placeholder="固定译法" /></label></div>
                 <button class="secondary-button" @click="addDictionaryTermToGlossary">加入术语表</button>
                 <small v-if="glossaryFromDictionaryNotice" class="muted">{{ glossaryFromDictionaryNotice }}</small>
               </div>
             </div>
             <div v-else-if="dictionaryError" class="state-message error-message">{{ dictionaryError }}</div>
-            <div v-else class="state-message muted">{{ segmentDictionary?.unavailableReason || '本地词典暂未收录该词或短语。' }}</div>
+            <div v-else class="state-message muted">{{ segmentDictionary?.unavailableReason || '本地词典暂未收录该词或短语。' }}<p v-if="segmentDictionary?.suggestions?.length" class="dictionary-hint muted">建议：{{ segmentDictionary.suggestions.join('、') }}</p></div>
           </section>
         </div>
         <section v-if="showRevisionPopover" class="revision-popover surface">
@@ -577,3 +550,4 @@ onUnmounted(() => {
     <section v-if="glossaryValidation.length" class="quality-card surface"><div class="panel-toolbar"><span>术语校验</span><small>{{ glossaryValidation.filter((item) => item.applied).length }} / {{ glossaryValidation.length }} 已按术语表使用</small></div><ul><li v-for="item in glossaryValidation" :key="item.sourceTerm" :class="item.applied ? 'glossary-valid' : 'glossary-invalid'">{{ item.applied ? '✓' : '!' }} {{ item.sourceTerm }} → {{ item.targetTerm }}{{ item.applied ? '' : '（译文中未检测到）' }}</li></ul></section>
   </div>
 </template>
+

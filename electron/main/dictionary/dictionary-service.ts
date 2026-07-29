@@ -115,6 +115,17 @@ export class DictionaryService {
         };
       }
 
+      const prefixHits = this.repository.findByPrefix(normalizedQuery, 5);
+      if (prefixHits.length) {
+        return {
+          query,
+          normalizedQuery,
+          found: false,
+          matchType: "none",
+          suggestions: prefixHits.map((item) => item.word).slice(0, 5)
+        };
+      }
+
       return empty;
     } catch {
       return {

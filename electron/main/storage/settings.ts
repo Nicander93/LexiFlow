@@ -51,15 +51,24 @@ export class SettingsStore {
 
   getPublic(): AppSettings {
     const settings = this.get();
-    settings.provider.apiKey = settings.provider.apiKey ? MASKED_KEY : "";
+    const apiKeyConfigured = Boolean(settings.provider.apiKey);
+    settings.provider.apiKey = "";
+    settings.provider.apiKeyConfigured = apiKeyConfigured;
     return settings;
   }
 
   async update(next: AppSettings): Promise<AppSettings> {
     const currentApiKey = this.decryptApiKey();
-    const requestedApiKey = next.provider.apiKey === MASKED_KEY ? currentApiKey : next.provider.apiKey ?? "";
+    const requestedApiKey = next.provider.apiKey?.trim()
+      ? next.provider.apiKey === MASKED_KEY
+        ? currentApiKey
+        : next.provider.apiKey
+      : next.provider.apiKeyConfigured
+        ? currentApiKey
+        : "";
     const stored = mergeSettings(next as unknown as StoredSettings);
     delete (stored.provider as { apiKey?: string }).apiKey;
+    delete (stored.provider as { apiKeyConfigured?: boolean }).apiKeyConfigured;
     delete stored.provider.encryptedApiKey;
     if (requestedApiKey) {
       if (safeStorage.isEncryptionAvailable()) {

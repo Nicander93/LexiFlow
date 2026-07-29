@@ -56,6 +56,9 @@
 .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #c9d7e8; border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .error-message, .error-card, .popup-error { color: #b53240; background: var(--danger-soft); }
+.warning-message, .popup-warning { color: var(--warning); background: var(--warning-soft); }
+.cleanup-notice { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 16px 8px; padding: 8px 12px; border-radius: 10px; color: var(--warning); background: var(--warning-soft); font-size: 12px; }
+.cleanup-original { margin: 0 16px 10px; padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,.03); font-size: 12px; white-space: pre-wrap; }
 .privacy-warning { margin-top: 15px; padding: 12px 14px; border-radius: 12px; color: var(--warning); background: var(--warning-soft); font-size: 12px; line-height: 1.55; }
 .toast { position: fixed; right: 28px; top: 24px; z-index: var(--z-toast); max-width: 380px; white-space: pre-line; padding: 12px 16px; border: 1px solid rgba(255,255,255,.8); border-radius: 14px; box-shadow: var(--shadow-float); backdrop-filter: blur(18px); }
 .toast.success { color: var(--success); background: rgba(234,248,241,.94); }

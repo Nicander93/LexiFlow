@@ -87,8 +87,15 @@ const modeLabel = (mode: TranslationHistory["mode"]) =>
         <template v-if="selectedItem">
           <div class="panel-toolbar"><span>详情</span><div><button class="text-button" :title="selectedItem.isFavorite ? '取消收藏' : '收藏'" @click="toggleFavorite(selectedItem)">{{ selectedItem.isFavorite ? '★ 已收藏' : '☆ 收藏' }}</button><button class="text-button danger" @click="deleteItem(selectedItem.id)">删除</button></div></div>
           <h3>原文</h3><pre>{{ selectedItem.sourceText }}</pre>
+          <template v-if="selectedItem.originalSourceText && selectedItem.originalSourceText !== selectedItem.sourceText">
+            <h3>原始输入</h3><pre>{{ selectedItem.originalSourceText }}</pre>
+          </template>
           <h3>结果</h3><pre>{{ selectedItem.resultText }}</pre>
-          <div class="form-actions"><button class="secondary-button" title="复制原文" @click="copy(selectedItem.sourceText)">复制原文</button><button class="secondary-button" title="复制原文和译文" @click="copy(bilingualText(selectedItem))">复制双语</button><button class="secondary-button" @click="retranslate(selectedItem)"><AppIcon name="refresh" :size="15" /> 重新处理</button><button class="primary-button" title="复制译文" @click="copy(selectedItem.resultText)"><AppIcon :name="copied ? 'check' : 'copy'" :size="15" /> {{ copied ? '已复制' : '复制译文' }}</button></div>
+          <template v-if="selectedItem.originalResultText && selectedItem.originalResultText !== selectedItem.resultText">
+            <h3>初始译文</h3><pre>{{ selectedItem.originalResultText }}</pre>
+          </template>
+          <p v-if="selectedItem.revisions?.length" class="muted">含 {{ selectedItem.revisions.length }} 条句段修订</p>
+          <div class="form-actions"><button class="secondary-button" title="复制原文" @click="copy(selectedItem.sourceText)">复制原文</button><button class="secondary-button" title="复制原文和译文" @click="copy(bilingualText(selectedItem))">复制双语</button><button class="secondary-button" @click="retranslate(selectedItem)"><AppIcon name="refresh" :size="15" /> 打开会话</button><button class="primary-button" title="复制译文" @click="copy(selectedItem.resultText)"><AppIcon :name="copied ? 'check' : 'copy'" :size="15" /> {{ copied ? '已复制' : '复制译文' }}</button></div>
         </template>
         <div v-else class="state-message state-message--stack muted"><span class="empty-orb"><AppIcon name="history" /></span><strong>选择一条记录查看详情</strong></div>
       </section>

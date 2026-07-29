@@ -13,16 +13,43 @@ export function useTranslation() {
   const resultText = ref("");
   const result = ref<TranslationResult>();
   const errorMessage = ref("");
+  const warningMessage = ref("");
+  const historyId = ref<string>();
   const currentRequestId = ref<string>();
   let lastRequest: TranslationRequest | undefined;
 
   const removeListener = translator.translation.onEvent((event) => {
     if (currentRequestId.value && event.requestId !== currentRequestId.value) return;
     if (!currentRequestId.value) currentRequestId.value = event.requestId;
-    status.value = event.status;
+    if (event.status !== "success" || status.value !== "success" || !event.warning) {
+      status.value = event.status;
+    }
     if (event.status === "streaming" && event.content) resultText.value += event.content;
+    if (event.status === "streaming" && event.segment) {
+      const current = result.value;
+      const segments = [...(current?.segments ?? [])];
+      const index = segments.findIndex((item) => item.id === event.segment!.id);
+      if (index >= 0) segments[index] = event.segment;
+      else segments.push(event.segment);
+      const targetText = segments.map((item) => item.target).join("\n");
+      result.value = {
+        requestId: event.requestId,
+        sourceText: current?.sourceText ?? lastRequest?.text ?? "",
+        originalSourceText: current?.originalSourceText,
+        targetText,
+        sourceLanguage: current?.sourceLanguage ?? "",
+        targetLanguage: current?.targetLanguage ?? lastRequest?.targetLanguage ?? "auto",
+        segments,
+        modelInfo: current?.modelInfo ?? { provider: "ollama", model: "", durationMs: 0 },
+        cleanupActions: current?.cleanupActions,
+        createdAt: current?.createdAt ?? Date.now()
+      };
+      resultText.value = targetText;
+    }
     if (event.status === "success" && event.content) resultText.value = event.content;
-    if (event.status === "success") result.value = event.result;
+    if (event.status === "success" && event.result) result.value = event.result;
+    if (event.historyId) historyId.value = event.historyId;
+    if (event.warning) warningMessage.value = event.warning;
     if (event.error) errorMessage.value = event.error;
   });
 
@@ -34,6 +61,8 @@ export function useTranslation() {
     resultText.value = "";
     result.value = undefined;
     errorMessage.value = "";
+    warningMessage.value = "";
+    historyId.value = undefined;
     status.value = "loading";
     try {
       const requestId = await translator.translation.start(payload);
@@ -55,6 +84,8 @@ export function useTranslation() {
     resultText.value = "";
     result.value = undefined;
     errorMessage.value = "";
+    warningMessage.value = "";
+    historyId.value = undefined;
     status.value = "idle";
     lastRequest = undefined;
   }
@@ -70,5 +101,5 @@ export function useTranslation() {
     removeListener();
   });
 
-  return { status, resultText, result, errorMessage, isRunning, start, stop, retry, reset };
+  return { status, resultText, result, errorMessage, warningMessage, historyId, isRunning, start, stop, retry, reset };
 }

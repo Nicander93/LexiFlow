@@ -17,15 +17,33 @@ const captureError = ref("");
 const capturing = ref(false);
 const pinned = ref(false);
 const profiles = ref<TranslationProfile[]>([]);
-const profileId = ref("general");
+const profileId = ref("technical");
+const defaultTranslationProfileId = ref("technical");
 const copied = ref(false);
 const sourceExpanded = ref(true);
 const translator = getTranslatorApi();
-const { status, resultText, result, errorMessage, isRunning, start, stop, retry, reset } = useTranslation();
+const { status, resultText, result, errorMessage, warningMessage, isRunning, start, stop, retry, reset } = useTranslation();
 const { status: dictionaryStatus, result: dictionaryResult, lookupImmediate, reset: resetDictionary } = useDictionary(0);
 const hoveredSegmentId = ref<string>();
 const lockedSegmentId = ref<string>();
 let payloadSequence = 0;
+
+function syncProfileForMode(nextMode: TranslationMode, preferredProfileId?: string): void {
+  if (nextMode === "naming") return;
+  if (preferredProfileId) {
+    profileId.value = preferredProfileId;
+    return;
+  }
+  profileId.value = nextMode === "technical"
+    ? (defaultTranslationProfileId.value || "technical")
+    : "general";
+}
+
+function adaptHeightForView(view: PopupView): void {
+  if (view === "dictionary") translator.window.adaptPopupHeight("dictionary");
+  else if (view === "naming") translator.window.adaptPopupHeight("naming");
+  else translator.window.adaptPopupHeight("translation");
+}
 
 const namingResult = computed<NamingResult | null>(() => {
   if (mode.value !== "naming" || status.value !== "success") return null;
@@ -53,8 +71,10 @@ async function run(): Promise<void> {
 
 async function selectView(view: PopupView): Promise<void> {
   popupView.value = view;
+  adaptHeightForView(view);
   if (view === "dictionary") return;
   mode.value = view;
+  syncProfileForMode(view);
   await run();
 }
 
@@ -108,6 +128,10 @@ function navigateSegment(id: string): void { lockedSegmentId.value = id; hovered
 let removePayloadListener: (() => void) | undefined;
 onMounted(() => {
   document.addEventListener("keydown", handleKeydown);
+  void translator.settings.get().then((settings) => {
+    defaultTranslationProfileId.value = settings.shortcuts.defaultTranslationProfileId || "technical";
+    profileId.value = defaultTranslationProfileId.value;
+  }).catch(() => undefined);
   void translator.profiles.list().then((items) => { profiles.value = items; }).catch(() => undefined);
   removePayloadListener = translator.window.onPopupPayload((payload) => {
     const sequence = ++payloadSequence;
@@ -117,6 +141,7 @@ onMounted(() => {
     copied.value = false;
     mode.value = payload.mode;
     popupView.value = payload.mode;
+    syncProfileForMode(payload.mode, payload.profileId);
     capturing.value = Boolean(payload.capturing);
     captureError.value = payload.error ?? "";
     hoveredSegmentId.value = undefined;
@@ -167,18 +192,26 @@ onUnmounted(() => { document.removeEventListener("keydown", handleKeydown); remo
         />
         <div v-else-if="status === 'loading'" class="popup-state"><span class="spinner" />正在等待模型响应…</div>
         <div v-else-if="status === 'error'" class="popup-error">{{ errorMessage }}</div>
-        <div v-else-if="namingResult" class="popup-candidates"><button v-for="candidate in namingResult.candidates" :key="candidate.name" @click="copy(candidate.name)"><code>{{ candidate.name }}</code><small>{{ candidate.meaning }}</small></button></div>
-        <SegmentedText
-          v-else-if="hasStructuredResult && result"
-          side="target"
-          :segments="result.segments"
-          :active-id="activeSegmentId"
-          @hover="handleSegmentHover"
-          @toggle="toggleSegment"
-          @clear="clearSegmentLock"
-          @navigate="navigateSegment"
-        />
-        <pre v-else>{{ displayResult }}</pre>
+        <template v-else-if="namingResult">
+          <div v-if="warningMessage" class="popup-warning">{{ warningMessage }}</div>
+          <div class="popup-candidates"><button v-for="candidate in namingResult.candidates" :key="candidate.name" @click="copy(candidate.name)"><code>{{ candidate.name }}</code><small>{{ candidate.meaning }}</small></button></div>
+        </template>
+        <template v-else-if="hasStructuredResult && result">
+          <div v-if="warningMessage" class="popup-warning">{{ warningMessage }}</div>
+          <SegmentedText
+            side="target"
+            :segments="result.segments"
+            :active-id="activeSegmentId"
+            @hover="handleSegmentHover"
+            @toggle="toggleSegment"
+            @clear="clearSegmentLock"
+            @navigate="navigateSegment"
+          />
+        </template>
+        <template v-else>
+          <div v-if="warningMessage && displayResult" class="popup-warning">{{ warningMessage }}</div>
+          <pre>{{ displayResult }}</pre>
+        </template>
       </section>
     </template>
     <footer class="popup-footer">

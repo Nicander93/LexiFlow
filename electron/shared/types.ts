@@ -150,6 +150,8 @@ export interface SegmentRevisionRequest {
   instruction: string;
   targetLanguage: TargetLanguage;
   profileId?: string;
+  /** 主进程按 Profile 注入，Renderer 不应作为可信配置来源。 */
+  profilePrompt?: string;
 }
 
 export interface SegmentRevision {
@@ -172,6 +174,7 @@ export interface SegmentAlternativeRequest {
   segment: TranslationSegment;
   targetLanguage: TargetLanguage;
   profileId?: string;
+  profilePrompt?: string;
 }
 
 export interface SourceSegment {
@@ -198,6 +201,8 @@ export interface TranslationModelInfo {
 export interface TranslationResult {
   requestId: string;
   sourceText: string;
+  /** 用户原始输入；未清理时与 sourceText 相同。 */
+  originalSourceText?: string;
   targetText: string;
   sourceLanguage: string;
   targetLanguage: string;
@@ -206,6 +211,24 @@ export interface TranslationResult {
   promptVersion?: string;
   glossaryValidation?: GlossaryMatchValidation[];
   createdAt: number;
+  cleanupActions?: CleanupAction[];
+}
+
+export type CleanupActionType =
+  | "normalize-line-breaks"
+  | "remove-soft-wraps"
+  | "normalize-spaces"
+  | "protect-code-block";
+
+export interface CleanupAction {
+  type: CleanupActionType;
+  description: string;
+}
+
+export interface PreparedTranslationInput {
+  originalText: string;
+  normalizedText: string;
+  cleanupActions: CleanupAction[];
 }
 
 export interface TranslationChunk {
@@ -287,6 +310,7 @@ export interface DictionaryContextRequest {
   target: string;
   targetLanguage: TargetLanguage;
   profileId?: string;
+  profilePrompt?: string;
 }
 
 export interface DictionaryContextEvent {
@@ -305,6 +329,8 @@ export interface ProviderConfig {
   /** When true, allow model thinking/reasoning; default false for translation latency. */
   enableReasoning?: boolean;
   apiKey?: string;
+  /** Renderer-only hint from settings:get; never persisted. */
+  apiKeyConfigured?: boolean;
   timeoutMs: number;
   stream: boolean;
   keepAlive: string;
@@ -315,6 +341,8 @@ export interface ShortcutSettings {
   naming: string;
   screenshot: string;
   paused: boolean;
+  /** 划词/托盘快速翻译使用的默认 Profile。 */
+  defaultTranslationProfileId: string;
 }
 
 export interface TranslationSettings {
@@ -344,6 +372,10 @@ export interface ModelRoutingSettings {
 export interface WindowSettings {
   closeAction: "hide" | "quit";
   autoHidePopup: boolean;
+  popupBounds?: {
+    width: number;
+    height: number;
+  };
 }
 
 export interface AppSettings {
@@ -360,15 +392,32 @@ export interface AppSettings {
 
 export interface TranslationHistory {
   id: string;
+  /** 规范化后用于翻译的原文（兼容旧字段名）。 */
   sourceText: string;
+  /** 用户原始输入。 */
+  originalSourceText?: string;
+  /** 最终展示译文（含修订）。 */
   resultText: string;
+  /** 模型首次译文。 */
+  originalResultText?: string;
   mode: TranslationMode;
+  profileId?: string;
   sourceLanguage?: string;
   targetLanguage: string;
   provider: ProviderType;
   model: string;
+  promptVersion?: string;
   createdAt: string;
+  updatedAt?: string;
   isFavorite: boolean;
+  revisions?: SegmentRevision[];
+  segments?: TranslationSegment[];
+}
+
+export interface HistoryRevisionUpdate {
+  id: string;
+  revisions: SegmentRevision[];
+  resultText: string;
 }
 
 export interface NamingCandidate {
@@ -396,7 +445,12 @@ export interface TranslationEvent {
   status: TranslationStatus;
   content?: string;
   error?: string;
+  /** 非阻断提示（如历史写入失败）；不得覆盖成功状态。 */
+  warning?: string;
   result?: TranslationResult;
+  /** 历史/Session id，便于修订落盘。 */
+  historyId?: string;
+  segment?: TranslationSegment;
 }
 
 export interface SegmentRevisionEvent {
@@ -420,6 +474,7 @@ export interface SelectionResult {
 
 export interface PopupPayload {
   mode: TranslationMode;
+  profileId?: string;
   text?: string;
   error?: string;
   capturing?: boolean;
@@ -473,12 +528,14 @@ export const IPC_CHANNELS = {
   // 划词取词
   selectionCapture: "selection:capture",
 
-  // 翻译历史
+  // 翻译历史（含 Session 修订）
   historyList: "history:list",
   historySearch: "history:search",
   historyToggleFavorite: "history:toggle-favorite",
   historyDelete: "history:delete",
   historyClear: "history:clear",
+  historyUpdateRevisions: "history:update-revisions",
+  historyGet: "history:get",
 
   // 词典：本地 ECDICT 查词 + 模型语境解释
   dictionaryLookup: "dictionary:lookup",
@@ -529,5 +586,6 @@ export const IPC_CHANNELS = {
   // 划词弹窗：payload 主→渲染，close/pin 渲染→主
   popupPayload: "popup:payload",
   popupClose: "popup:close",
-  popupPin: "popup:pin"
+  popupPin: "popup:pin",
+  popupAdaptHeight: "popup:adapt-height"
 } as const;
