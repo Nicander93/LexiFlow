@@ -17,15 +17,6 @@ vi.mock("../electron/main/provider", () => ({
   })
 }));
 
-vi.mock("../electron/main/core/model-concurrency-gate", () => {
-  class Gate {
-    async acquireDocument(): Promise<void> { return; }
-    releaseDocument(): void { return; }
-    async yieldForInteractive(): Promise<void> { return; }
-  }
-  return { ModelConcurrencyGate: Gate, modelConcurrencyGate: new Gate() };
-});
-
 vi.mock("../electron/main/core/model-task-scheduler", () => {
   class Scheduler {
     runInteractive<T>(task: (ctx: { signal: AbortSignal }) => Promise<T>, signal?: AbortSignal): Promise<T> {

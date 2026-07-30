@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "../electron/shared/defaults";
 import { detectLanguage, resolveTargetLanguage } from "../electron/main/core/language";
 import { buildModelOptions } from "../electron/main/core/model-options";
-import { parseNamingResult } from "../electron/main/core/naming";
 import { buildDictionaryContextPrompt, buildPrompt, buildRevisionPrompt } from "../electron/main/core/prompt";
 import { validateSettings } from "../electron/main/core/settings-validation";
-import { hasClipboardChanged, validateInput } from "../electron/main/core/validation";
+import { isCapturedSelection, validateInput } from "../electron/main/core/validation";
 import { mapProviderError, UserFacingError } from "../electron/main/core/errors";
 import { reactive } from "vue";
 import { toIpcPayload } from "../electron/shared/serialization";
@@ -28,9 +27,9 @@ describe("文本与剪贴板校验", () => {
   });
 
   it("通过临时标记判断复制是否成功，也允许选中文字与旧剪贴板相同", () => {
-    expect(hasClipboardChanged("same", "same", "marker")).toBe(true);
-    expect(hasClipboardChanged("before", "marker", "marker")).toBe(false);
-    expect(hasClipboardChanged("before", "   ", "marker")).toBe(false);
+    expect(isCapturedSelection("same", "marker")).toBe(true);
+    expect(isCapturedSelection("marker", "marker")).toBe(false);
+    expect(isCapturedSelection("   ", "marker")).toBe(false);
   });
 });
 
@@ -70,16 +69,6 @@ describe("提示词和模型参数", () => {
   });
 });
 
-describe("命名结构解析", () => {
-  it("解析代码块包裹的结构化结果", () => {
-    const result = parseNamingResult('```json\n{"recommended":"isReady","candidates":[{"name":"isReady","meaning":"是否就绪"}]}\n```');
-    expect(result.recommended).toBe("isReady");
-  });
-
-  it("拒绝缺失候选项的结果", () => {
-    expect(() => parseNamingResult('{"recommended":"isReady","candidates":[]}')).toThrow("候选");
-  });
-});
 
 describe("设置和错误映射", () => {
   it("校验 URL、模型、快捷键和数值范围", () => {

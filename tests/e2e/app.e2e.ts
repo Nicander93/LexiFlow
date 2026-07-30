@@ -115,7 +115,7 @@ test("translation validation reaches the renderer through IPC", async () => {
 async function sourceClearAndValidate(): Promise<void> {
   const source = mainWindow.locator("textarea").first();
   await source.fill("");
-  await mainWindow.getByRole("button", { name: /开始翻译|AI 翻译/ }).click();
+  await mainWindow.getByRole("button", { name: "开始翻译", exact: true }).click();
   await expect(mainWindow.getByText(/请输入文本/)).toBeVisible();
 }
 
@@ -137,7 +137,7 @@ test("configured Ollama model completes a real translation", async () => {
 
   await navLink(mainWindow, "#/").click();
   await mainWindow.getByPlaceholder("输入或粘贴文本，Ctrl + Enter 执行").fill("Hello, world.");
-  await mainWindow.getByRole("button", { name: /开始翻译|AI 翻译/ }).click();
+  await mainWindow.getByRole("button", { name: "开始翻译", exact: true }).click();
   await expect(mainWindow.locator(".result-text")).toBeVisible({ timeout: 100_000 });
   await expect(mainWindow.locator(".result-text")).not.toHaveText("");
 });

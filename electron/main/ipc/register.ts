@@ -19,6 +19,7 @@ import type { DocumentManager } from "../document/manager";
 import type { WindowsOcrService } from "../ocr/windows-ocr";
 import type { SettingsStore } from "../storage/settings";
 import type { TranslationManager } from "../translation/manager";
+import type { TranslationSessionStore } from "../translation/session-store";
 import type { WindowManager } from "../window/manager";
 import { assertTrustedSender } from "./security";
 import {
@@ -41,9 +42,12 @@ interface IpcDependencies {
   documentManager: DocumentManager;
   ocrService: WindowsOcrService;
   translationManager: TranslationManager;
+  translationSessionStore: TranslationSessionStore;
   windowManager: WindowManager;
   applySettings: (settings: AppSettings) => unknown;
   clearLocalData: () => Promise<void>;
+  triggerSelectionTip: () => void;
+  dismissSelectionTip: () => void;
 }
 
 function withTrustedSender<Args extends unknown[], R>(
@@ -56,7 +60,7 @@ function withTrustedSender<Args extends unknown[], R>(
 }
 
 export function registerIpcHandlers(dependencies: IpcDependencies): void {
-  const { settingsStore, historyStore, dictionaryService, glossaryStore, profileStore, documentStore, documentManager, ocrService, translationManager, windowManager } = dependencies;
+  const { settingsStore, historyStore, dictionaryService, glossaryStore, profileStore, documentStore, documentManager, ocrService, translationManager, translationSessionStore, windowManager } = dependencies;
 
   ipcMain.handle(IPC_CHANNELS.runtimePing, () => ({
     apiVersion: 2 as const,
@@ -73,6 +77,7 @@ export function registerIpcHandlers(dependencies: IpcDependencies): void {
   }));
   ipcMain.handle(IPC_CHANNELS.providerHealth, async () => createProvider(settingsStore.get()).healthCheck());
   ipcMain.handle(IPC_CHANNELS.providerModels, async () => createProvider(settingsStore.get()).getModels());
+  ipcMain.handle(IPC_CHANNELS.translationSessionGet, () => translationSessionStore.getActive());
   ipcMain.handle(IPC_CHANNELS.translationStart, (event, request: TranslationRequest) => translationManager.start(event.sender, request));
   ipcMain.on(IPC_CHANNELS.translationCancel, (_event, requestId?: string) => translationManager.cancel(requestId));
   ipcMain.handle(IPC_CHANNELS.revisionStart, (event, request: SegmentRevisionRequest) => translationManager.revise(event.sender, request));
@@ -80,6 +85,14 @@ export function registerIpcHandlers(dependencies: IpcDependencies): void {
   ipcMain.handle(IPC_CHANNELS.alternativesStart, (event, request: SegmentAlternativeRequest) => translationManager.alternatives(event.sender, request));
   ipcMain.on(IPC_CHANNELS.alternativesCancel, (_event, requestId?: string) => translationManager.cancel(requestId));
   ipcMain.handle(IPC_CHANNELS.selectionCapture, () => captureSelectedText(settingsStore.get().translation.maxInputLength));
+  ipcMain.on(IPC_CHANNELS.selectionTipTrigger, (event) => {
+    assertTrustedSender(event);
+    dependencies.triggerSelectionTip();
+  });
+  ipcMain.on(IPC_CHANNELS.selectionTipDismiss, (event) => {
+    assertTrustedSender(event);
+    dependencies.dismissSelectionTip();
+  });
   ipcMain.handle(IPC_CHANNELS.historyList, () => historyStore.list());
   ipcMain.handle(IPC_CHANNELS.historyGet, (_event, id: string) => historyStore.get(id));
   ipcMain.handle(IPC_CHANNELS.historySearch, (_event, query: string) => historyStore.search(query));
@@ -152,8 +165,8 @@ export function registerIpcHandlers(dependencies: IpcDependencies): void {
   ipcMain.on(IPC_CHANNELS.popupPin, (_event, pinned: boolean) => {
     windowManager.setPopupPinned(pinned);
   });
-  ipcMain.on(IPC_CHANNELS.popupAdaptHeight, (_event, kind?: "dictionary" | "translation" | "naming" | "default") => {
-    windowManager.adaptPopupHeight(kind ?? "default");
+  ipcMain.on(IPC_CHANNELS.popupAdaptHeight, (_event, kind?: "dictionary" | "translation" | "naming" | "default", contentHeight?: unknown) => {
+    windowManager.adaptPopupHeight(kind ?? "default", typeof contentHeight === "number" && Number.isFinite(contentHeight) ? contentHeight : undefined);
   });
 
   app.on("before-quit", () => translationManager.cancel());

@@ -3,7 +3,7 @@
  * 退出时取消模型请求；history.retention === clear-on-exit 时先清历史再真正退出。
  * 托盘应用：window-all-closed 不得结束进程。
  */
-import { app } from "electron";
+import { app, screen } from "electron";
 import type { AppSettings, TranslationMode } from "../../shared/types";
 import { captureSelectedText } from "../clipboard/selection";
 import { modeShortcutForProfile } from "../core/translation-policy";
@@ -18,8 +18,11 @@ import { DocumentManager } from "../document/manager";
 import { WindowsOcrService } from "../ocr/windows-ocr";
 import { SettingsStore } from "../storage/settings";
 import { TranslationManager } from "../translation/manager";
+import { TranslationSessionStore } from "../translation/session-store";
 import { TrayManager } from "../tray/manager";
 import { WindowManager } from "../window/manager";
+import { SelectionController } from "../selection/controller";
+import { createGlobalMouseHook } from "../selection/uiohook-adapter";
 
 export async function bootstrapApplication(): Promise<void> {
   await app.whenReady();
@@ -44,7 +47,8 @@ export async function bootstrapApplication(): Promise<void> {
       void settingsStore.update(settings);
     }
   );
-  const translationManager = new TranslationManager(settingsStore, historyStore, glossaryStore, profileStore);
+  const translationSessionStore = new TranslationSessionStore();
+  const translationManager = new TranslationManager(settingsStore, historyStore, glossaryStore, profileStore, translationSessionStore);
   const documentManager = new DocumentManager(documentStore, profileStore, settingsStore, glossaryStore);
   const ocrService = new WindowsOcrService();
 
@@ -63,6 +67,22 @@ export async function bootstrapApplication(): Promise<void> {
     await triggerSelection(modeShortcutForProfile(profileId), profileId);
   };
 
+  const showCapturedSelection = async (text: string): Promise<void> => {
+    const profileId = settingsStore.get().shortcuts.defaultTranslationProfileId || "technical";
+    translationManager.cancel();
+    await windowManager.showPopup({ mode: modeShortcutForProfile(profileId), profileId, text });
+  };
+
+  const selectionController = new SelectionController({
+    hook: createGlobalMouseHook(),
+    capture: () => captureSelectedText(settingsStore.get().translation.maxInputLength),
+    normalizePoint: (point) => screen.screenToDipPoint(point),
+    showTip: (point) => void windowManager.showSelectionTip(point),
+    hideTip: () => windowManager.hideSelectionTip(),
+    isTipPoint: (point) => windowManager.isSelectionTipPoint(point),
+    onConfirm: (text) => void showCapturedSelection(text)
+  });
+
   const hotkeyManager = new HotkeyManager((action) => {
     if (action === "ocr") void windowManager.requestOcrCapture();
     else if (action === "naming") void triggerSelection("naming");
@@ -73,6 +93,11 @@ export async function bootstrapApplication(): Promise<void> {
   const applySettings = (settings: AppSettings) => {
     app.setLoginItemSettings({ openAtLogin: settings.startup.enabled });
     const shortcutResult = hotkeyManager.register(settings.shortcuts);
+    try {
+      selectionController.setEnabled(settings.shortcuts.enableSelectionTranslation && !settings.shortcuts.paused);
+    } catch {
+      shortcutResult.errors.push("?????????????????");
+    }
     trayManager.update(settings.shortcuts);
     return shortcutResult;
   };
@@ -110,9 +135,12 @@ export async function bootstrapApplication(): Promise<void> {
     documentManager,
     ocrService,
     translationManager,
+    translationSessionStore,
     windowManager,
     applySettings,
-    clearLocalData
+    clearLocalData,
+    triggerSelectionTip: () => selectionController.confirm(),
+    dismissSelectionTip: () => selectionController.dismiss()
   });
 
   await windowManager.ensurePopupWindow();
@@ -127,6 +155,7 @@ export async function bootstrapApplication(): Promise<void> {
       windowManager.setQuitting(true);
       dictionaryService.close();
       hotkeyManager.unregister();
+      selectionController.dispose();
       trayManager.destroy();
       return;
     }

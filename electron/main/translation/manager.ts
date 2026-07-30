@@ -29,6 +29,7 @@ import type { GlossaryStore } from "../storage/glossary";
 import type { ProfileStore } from "../storage/profiles";
 import { createTranslationResult } from "./result";
 import { splitIntoSegments } from "./segments";
+import { TranslationSessionStore } from "./session-store";
 import { PROMPT_VERSION } from "../../shared/defaults";
 import {
   IPC_CHANNELS,
@@ -64,10 +65,22 @@ export class TranslationManager {
     private readonly settingsStore: SettingsStore,
     private readonly historyStore: HistoryStore,
     private readonly glossaryStore: GlossaryStore,
-    private readonly profileStore: ProfileStore
+    private readonly profileStore: ProfileStore,
+    private readonly sessionStore: TranslationSessionStore
   ) {}
 
   private emit(sender: WebContents, event: TranslationEvent): void {
+    const active = this.sessionStore.getActive();
+    if (active?.requestId === event.requestId) {
+      let segments = active.segments;
+      let resultText = event.result?.targetText ?? active.resultText;
+      if (event.segment) {
+        const index = segments.findIndex((item) => item.id === event.segment!.id);
+        segments = index < 0 ? [...segments, event.segment] : segments.map((item, itemIndex) => itemIndex === index ? event.segment! : item);
+        resultText = segments.map((item) => item.target).join("\n");
+      } else if (event.content && event.status === "streaming") resultText += event.content;
+      this.sessionStore.patch(event.requestId, { status: event.status, resultText, segments, historyId: event.historyId ?? active.historyId });
+    }
     if (!sender.isDestroyed()) sender.send(IPC_CHANNELS.translationEvent, event);
   }
 
@@ -97,6 +110,7 @@ export class TranslationManager {
   start(sender: WebContents, request: TranslationRequest): string {
     const id = randomUUID();
     const controller = this.beginInteractive(id);
+    this.sessionStore.create({ source: "main", sourceText: request.text, resultText: "", segments: [], status: "loading", profileId: request.profileId ?? "general", targetLanguage: request.targetLanguage, requestId: id });
     void this.run(sender, id, request, controller.signal);
     return id;
   }

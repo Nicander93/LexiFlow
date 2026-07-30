@@ -131,18 +131,13 @@ export interface DocumentTaskRecord extends DocumentTask {
 export interface DocumentImportRequest { profileId: string; }
 export interface DocumentExportRequest { taskId: string; format: "translated" | "bilingual" | "json"; }
 export interface DocumentTaskEvent { task: DocumentTaskRecord; }
-export interface TranslationQualityIssue {
-  segmentId: string;
-  kind: "empty" | "number" | "unit" | "url" | "code" | "duplicate" | "language" | "glossary";
-  message: string;
-}
 export interface OcrBlock {
   id: string;
   text: string;
   boundingBox: { x: number; y: number; width: number; height: number };
   confidence?: number;
 }
-export interface OcrResult { text: string; blocks: OcrBlock[]; imageDataUrl: string; imageWidth: number; imageHeight: number; }
+export interface OcrResult { text: string; blocks: OcrBlock[]; imageDataUrl: string; imageWidth: number; imageHeight: number; captureId?: string; }
 export interface OcrScreen { id: string; name: string; width: number; height: number; primary: boolean; }
 
 export interface SegmentRevisionRequest {
@@ -182,7 +177,11 @@ export interface SourceSegment {
   source: string;
   sourceStart: number;
   sourceEnd: number;
+  paragraphIndex?: number;
+  boundaryAfter?: SegmentBoundary;
 }
+
+export type SegmentBoundary = "inline" | "sentence" | "line" | "paragraph" | "block";
 
 export interface TranslationSegment extends SourceSegment {
   target: string;
@@ -341,6 +340,7 @@ export interface ShortcutSettings {
   naming: string;
   screenshot: string;
   paused: boolean;
+  enableSelectionTranslation: boolean;
   /** 划词/托盘快速翻译使用的默认 Profile。 */
   defaultTranslationProfileId: string;
 }
@@ -440,6 +440,21 @@ export type TranslationStatus =
   | "error"
   | "cancelled";
 
+export interface TranslationSession {
+  id: string;
+  source: "main" | "popup" | "ocr" | "history";
+  sourceText: string;
+  resultText: string;
+  segments: TranslationSegment[];
+  status: TranslationStatus;
+  profileId: string;
+  targetLanguage: TargetLanguage;
+  requestId?: string;
+  historyId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface TranslationEvent {
   requestId: string;
   status: TranslationStatus;
@@ -514,6 +529,7 @@ export const IPC_CHANNELS = {
   translationStart: "translation:start",
   translationCancel: "translation:cancel",
   translationEvent: "translation:event",
+  translationSessionGet: "translation:session-get",
 
   // 句段润色
   revisionStart: "revision:start",
@@ -527,6 +543,8 @@ export const IPC_CHANNELS = {
 
   // 划词取词
   selectionCapture: "selection:capture",
+  selectionTipTrigger: "selection:tip-trigger",
+  selectionTipDismiss: "selection:tip-dismiss",
 
   // 翻译历史（含 Session 修订）
   historyList: "history:list",

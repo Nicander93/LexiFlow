@@ -28,6 +28,7 @@ import type {
   DocumentTaskEvent,
   OcrResult,
   OcrScreen,
+  TranslationSession,
   SelectionResult,
   ShortcutRegistrationResult,
   TranslationEvent,
@@ -52,6 +53,7 @@ export interface TranslatorApi {
     getModels: () => Promise<ProviderModel[]>;
   };
   translation: {
+    getSession: () => Promise<TranslationSession | undefined>;
     start: (request: TranslationRequest) => Promise<string>;
     cancel: (requestId?: string) => void;
     onEvent: (listener: (event: TranslationEvent) => void) => () => void;
@@ -68,6 +70,8 @@ export interface TranslatorApi {
   };
   selection: {
     capture: () => Promise<SelectionResult>;
+    triggerTip: () => void;
+    dismissTip: () => void;
   };
   history: {
     list: () => Promise<TranslationHistory[]>;
@@ -124,7 +128,7 @@ export interface TranslatorApi {
     openMain: (route?: string) => void;
     closePopup: () => void;
     pinPopup: (pinned: boolean) => void;
-    adaptPopupHeight: (kind?: "dictionary" | "translation" | "naming" | "default") => void;
+    adaptPopupHeight: (kind?: "dictionary" | "translation" | "naming" | "default", contentHeight?: number) => void;
     onPopupPayload: (listener: (payload: PopupPayload) => void) => () => void;
     onNavigate: (listener: (route: string) => void) => () => void;
   };

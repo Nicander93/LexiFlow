@@ -42,6 +42,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     naming: "Ctrl+Alt+N",
     screenshot: "Ctrl+Alt+S",
     paused: false,
+    enableSelectionTranslation: true,
     defaultTranslationProfileId: "technical"
   },
   translation: {

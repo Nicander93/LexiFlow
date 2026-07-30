@@ -9,6 +9,8 @@ const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 export class WindowManager {
   private mainWindow: BrowserWindow | null = null;
   private popupWindow: BrowserWindow | null = null;
+  private selectionTipWindow: BrowserWindow | null = null;
+  private selectionTipTimer?: ReturnType<typeof setTimeout>;
   private popupPinned = false;
   private isQuitting = false;
   private rememberingBounds = false;
@@ -105,13 +107,13 @@ export class WindowManager {
   async ensurePopupWindow(): Promise<BrowserWindow> {
     if (this.popupWindow && !this.popupWindow.isDestroyed()) return this.popupWindow;
     const saved = this.getPopupBounds();
-    const width = Math.min(720, Math.max(360, saved?.width ?? 480));
-    const height = Math.min(this.maxPopupHeight(), Math.max(240, saved?.height ?? 420));
+    const width = Math.min(620, Math.max(360, saved?.width ?? 420));
+    const height = Math.min(this.maxPopupHeight(), Math.max(220, saved?.height ?? 300));
     const window = this.createWindow({
       width,
       height,
       minWidth: 360,
-      minHeight: 240,
+      minHeight: 220,
       maxHeight: this.maxPopupHeight(),
       show: false,
       frame: false,
@@ -141,13 +143,14 @@ export class WindowManager {
   }
 
   /** 按内容类型调整高度：词典紧凑，长文本抬高。 */
-  adaptPopupHeight(kind: "dictionary" | "translation" | "naming" | "default" = "default"): void {
+  adaptPopupHeight(kind: "dictionary" | "translation" | "naming" | "default" = "default", contentHeight?: number): void {
     if (!this.popupWindow || this.popupWindow.isDestroyed()) return;
     const cursor = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursor);
     const maxHeight = this.maxPopupHeight(display);
     const [width] = this.popupWindow.getSize();
-    const height = kind === "dictionary" ? 320 : kind === "naming" ? 380 : kind === "translation" ? Math.min(maxHeight, 560) : Math.min(maxHeight, 420);
+    const fallbackHeight = kind === "dictionary" ? 250 : kind === "naming" ? 300 : kind === "translation" ? 340 : 280;
+    const height = Math.min(maxHeight, Math.max(220, Math.round(contentHeight ?? fallbackHeight)));
     this.popupWindow.setMaximumSize(1200, maxHeight);
     this.popupWindow.setSize(width, height, false);
   }
@@ -165,6 +168,53 @@ export class WindowManager {
     window.setPosition(Math.round(x), Math.round(y), false);
     window.showInactive();
     window.webContents.send(IPC_CHANNELS.popupPayload, payload);
+  }
+
+  private async ensureSelectionTipWindow(): Promise<BrowserWindow> {
+    if (this.selectionTipWindow && !this.selectionTipWindow.isDestroyed()) return this.selectionTipWindow;
+    const window = this.createWindow({
+      width: 34,
+      height: 34,
+      show: false,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      title: "LexiFlow selection translation"
+    });
+    this.selectionTipWindow = window;
+    window.on("closed", () => {
+      this.selectionTipWindow = null;
+    });
+    await this.loadRenderer(window, "/selection-tip");
+    return window;
+  }
+
+  async showSelectionTip(point: { x: number; y: number }): Promise<void> {
+    const window = await this.ensureSelectionTipWindow();
+    const display = screen.getDisplayNearestPoint(point);
+    const bounds = display.workArea;
+    const [width, height] = window.getSize();
+    const x = Math.min(Math.max(point.x + 4, bounds.x), bounds.x + bounds.width - width);
+    const y = Math.min(Math.max(point.y + 6, bounds.y), bounds.y + bounds.height - height);
+    window.setPosition(Math.round(x), Math.round(y), false);
+    window.showInactive();
+    if (this.selectionTipTimer) clearTimeout(this.selectionTipTimer);
+    this.selectionTipTimer = setTimeout(() => this.hideSelectionTip(), 5_000);
+  }
+
+  hideSelectionTip(): void {
+    if (this.selectionTipTimer) clearTimeout(this.selectionTipTimer);
+    this.selectionTipTimer = undefined;
+    this.selectionTipWindow?.hide();
+  }
+
+  isSelectionTipPoint(point: { x: number; y: number }): boolean {
+    if (!this.selectionTipWindow?.isVisible()) return false;
+    const bounds = this.selectionTipWindow.getBounds();
+    return point.x >= bounds.x && point.x <= bounds.x + bounds.width
+      && point.y >= bounds.y && point.y <= bounds.y + bounds.height;
   }
 
   hidePopup(): void {

@@ -1,6 +1,6 @@
 /**
  * 文档翻译：导入分块后进入单并发队列；每个分块同样经 resolveModelAccess。
- * 交互请求通过 ModelConcurrencyGate 优先；暂停/取消会 abort 当前分块。失败分块写入 failedChunks 可重试。
+ * 交互请求通过 ModelTaskScheduler 优先；暂停/取消会 abort 当前分块。失败分块写入 failedChunks 可重试。
  * PDF 仅提取已有文本层，扫描件需先走 OCR。
  * cancelAll / dispose 用于清除本地数据与应用退出，避免后台 upsert 回写。
  */

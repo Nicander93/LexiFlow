@@ -3,7 +3,7 @@ defineProps<{
   name:
     | "translate" | "sparkle" | "history" | "settings" | "info"
     | "copy" | "stop" | "refresh" | "trash" | "search"
-    | "server" | "keyboard" | "shield" | "chevron" | "check";
+    | "server" | "keyboard" | "shield" | "chevron" | "check" | "bilingual";
   size?: number;
 }>();
 </script>
@@ -44,6 +44,7 @@ defineProps<{
     <template v-else-if="name === 'copy'">
       <rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
     </template>
+    <template v-else-if="name === 'bilingual'"><rect x="4" y="5" width="7" height="14" rx="1" /><rect x="13" y="5" width="7" height="14" rx="1" /><path d="M7 9h1M16 9h1M7 13h1M16 13h1" /></template>
     <template v-else-if="name === 'stop'">
       <circle cx="12" cy="12" r="9" /><rect x="9" y="9" width="6" height="6" rx="1" />
     </template>

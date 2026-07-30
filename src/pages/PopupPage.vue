@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useTranslation } from "../composables/useTranslation";
-import { useDictionary } from "../composables/useDictionary";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { useTranslation } from "../features/translation/useTranslation";
+import { useDictionary } from "../features/dictionary/useDictionary";
 import type { NamingResult, TranslationMode, TranslationProfile } from "../../electron/shared/types";
 import { shouldLookupDictionary } from "../../electron/shared/dictionary-eligibility";
 import { getTranslatorApi } from "../platform/translator";
-import SegmentedText from "../components/SegmentedText.vue";
-import DictionaryCompactCard from "../components/dictionary/DictionaryCompactCard.vue";
+import SegmentedText from "../features/translation/components/SegmentedText.vue";
+import DictionaryCompactCard from "../features/dictionary/components/DictionaryCompactCard.vue";
 
 type PopupView = "dictionary" | "normal" | "technical" | "naming";
 
@@ -21,6 +21,7 @@ const profileId = ref("technical");
 const defaultTranslationProfileId = ref("technical");
 const copied = ref(false);
 const sourceExpanded = ref(true);
+const popupShell = ref<HTMLElement>();
 const translator = getTranslatorApi();
 const { status, resultText, result, errorMessage, warningMessage, isRunning, start, stop, retry, reset } = useTranslation();
 const { status: dictionaryStatus, result: dictionaryResult, lookupImmediate, reset: resetDictionary } = useDictionary(0);
@@ -40,9 +41,8 @@ function syncProfileForMode(nextMode: TranslationMode, preferredProfileId?: stri
 }
 
 function adaptHeightForView(view: PopupView): void {
-  if (view === "dictionary") translator.window.adaptPopupHeight("dictionary");
-  else if (view === "naming") translator.window.adaptPopupHeight("naming");
-  else translator.window.adaptPopupHeight("translation");
+  const kind = view === "dictionary" ? "dictionary" : view === "naming" ? "naming" : "translation";
+  void nextTick(() => translator.window.adaptPopupHeight(kind, popupShell.value?.scrollHeight));
 }
 
 const namingResult = computed<NamingResult | null>(() => {
@@ -117,6 +117,8 @@ function close(): void { stop(); translator.window.closePopup(); }
 function togglePin(): void { pinned.value = !pinned.value; translator.window.pinPopup(pinned.value); }
 function openMain(): void { translator.window.openMain(mode.value === "naming" ? "/naming" : "/"); }
 function handleKeydown(event: KeyboardEvent): void { if (event.key === "Escape") close(); }
+
+watch([status, displayResult, sourceExpanded, popupView], () => adaptHeightForView(popupView.value));
 function handleSegmentHover(id: string | undefined): void { if (!lockedSegmentId.value) hoveredSegmentId.value = id; }
 function toggleSegment(id: string): void {
   lockedSegmentId.value = lockedSegmentId.value === id ? undefined : id;
@@ -156,7 +158,7 @@ onUnmounted(() => { document.removeEventListener("keydown", handleKeydown); remo
 </script>
 
 <template>
-  <div class="popup-shell">
+  <div ref="popupShell" class="popup-shell">
     <header class="popup-header drag-region">
       <div class="popup-tabs no-drag">
         <button v-if="showDictionaryTab" :class="{ active: popupView === 'dictionary' }" @click="selectView('dictionary')">词典</button>

@@ -1,62 +1,81 @@
-# 故障排查
+# LexiFlow 故障排查
 
-## Ollama 无法连接
+## 划词后没有出现提示
 
-确认 Ollama 已启动，默认地址是 `http://127.0.0.1:11434`。在设置页保存后执行连接测试，并确认模型名称存在。
+1. 在设置页确认“启用划词翻译”已开启。设置会自动保存，无需额外点击按钮。
+2. 完成拖选后松开鼠标；提示会出现在选区下方，而不是屏幕底部。
+3. 尝试普通文本页面。部分应用使用自绘文本、禁止复制，或以管理员权限运行，无法被普通权限进程读取。
+4. 若目标应用以管理员身份运行，LexiFlow 也需要相同权限。
+5. 检查是否有安全软件拦截全局鼠标钩子。
 
-## WSL 中访问 Windows Ollama
+提示出现但点击无效时，先确认选区仍存在。点击页面、滚动或重新选择会使旧提示失效，这是为了避免翻译过期内容。
 
-最终应用运行在 Windows，无需 WSL 网络转发。仅在 WSL 开发模式调试时，`127.0.0.1` 的可达性取决于 WSL 网络模式，可改填 Windows 主机地址。
+## 提示位置不正确
 
-## 全局快捷键注册失败
+划词提示按显示器 DIP 坐标定位。若位置明显偏移：
 
-快捷键可能被 Windows 或其他应用占用。进入设置改为 `Ctrl+Alt+T`、`Ctrl+Alt+N` 等组合。托盘菜单可以临时暂停快捷键。
+- 在 Windows 显示设置中确认每块屏幕的缩放比例。
+- 分别在 100%、125%、150% 和 200% 缩放下复现。
+- 多屏环境记录目标屏幕的排列和缩放比例。
+- 重启应用，排除显示设置变更后的旧坐标状态。
 
 ## 未检测到选中文字
 
-部分高权限应用不允许普通权限进程模拟复制；也有应用不支持标准 Ctrl+C。可在悬浮窗出现的输入框中手动粘贴。若目标应用以管理员身份运行，LexiFlow 也需要相同权限。
+LexiFlow 通过模拟复制读取选区。目标应用不支持标准复制、剪贴板被占用或权限等级不同都会导致失败。可改用快速翻译窗口手动输入，或使用截图 OCR。
 
-## Windows 打包失败
+## 全局快捷键注册失败
 
-先运行 `pnpm build` 排除代码错误。WSL 交叉构建需要能够下载 Electron 与 electron-builder 工具；项目路径建议放在 WSL 文件系统而非 `/mnt/c`。若 NSIS 交叉构建受环境限制，也可在 Windows PowerShell 中运行 `pnpm install --frozen-lockfile` 和 `pnpm dist:win`。
+快捷键可能被 Windows 或其他应用占用。在设置页改用其他 Electron accelerator 格式的组合键。修改会自动保存并重新注册；若仍失败，完全退出冲突应用后重试。
 
-### Electron 二进制下载超时 / 很慢
+## Ollama 无法连接
 
-`electron-builder` 默认从 GitHub 拉取 Electron zip，国内常会超时。项目已默认走 npmmirror：
+- 确认 Ollama 已启动，默认地址为 `http://127.0.0.1:11434`。
+- 确认设置中的模型名称已在 Ollama 中安装。
+- 在设置页执行连接测试。
+- 若从 WSL 调试 Windows 上的 Ollama，`127.0.0.1` 是否可达取决于 WSL 网络模式，可改用 Windows 主机地址。
 
-- `package.json` → `build.electronDownload.mirror`
-- `scripts/dist-win.mjs` → `ELECTRON_MIRROR` / `ELECTRON_BUILDER_BINARIES_MIRROR` / `CSC_IDENTITY_AUTO_DISCOVERY=false`
+## 远程 Provider 被拒绝
 
-也可手动覆盖：
-
-```powershell
-$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
-$env:ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"
-$env:CSC_IDENTITY_AUTO_DISCOVERY="false"
-pnpm dist:win:portable
-# 或安装包
-pnpm dist:win
-```
-
-若本机已有 HTTP 代理（如 Clash），也可改用代理而不是镜像：
-
-```powershell
-$env:HTTP_PROXY="http://127.0.0.1:7890"
-$env:HTTPS_PROXY="http://127.0.0.1:7890"
-pnpm dist:win:portable
-```
-
-超时后建议清掉不完整缓存再重试：删除 `%LOCALAPPDATA%\electron\Cache` 与 `%LOCALAPPDATA%\electron-builder\Cache` 中对应版本目录。
+首次使用远程 Provider 需要明确确认数据会发送到远程服务。Profile 禁止远程访问时，即使全局已确认也会被拦截。API Key 必须从设置页录入，应用不会把它写入普通设置文件。
 
 ## 本地词典不可用
 
-界面提示“本地词典资源不可用”时：
+确认开发目录或安装包资源中存在 `resources/dictionaries/ecdict-core.db`。开发和生产分别通过应用路径与 `process.resourcesPath` 定位，不能依赖启动时工作目录。词典故障不影响 AI 翻译。
 
-1. 确认安装包 / 开发目录中存在 `resources/dictionaries/ecdict-core.db`（打包后位于 `resources/dictionaries/`）。
-2. 开发模式不要依赖当前工作目录相对路径；主进程通过 `app.getAppPath()` / `process.resourcesPath` 定位。
-3. 词库损坏不影响翻译：可继续使用 AI 翻译；修复后重启应用即可。
-4. 自行重建：
+重建词典：
 
-```bash
-python scripts/dictionary/build_ecdict.py --input /path/to/stardict.db --output resources/dictionaries/ecdict-core.db
+```powershell
+python scripts/dictionary/build_ecdict.py --input C:\path\to\stardict.db --output resources/dictionaries/ecdict-core.db
 ```
+
+## 原生依赖安装或启动失败
+
+划词监听依赖 `uiohook-napi`。切换 Node/Electron 版本后应重新安装依赖，确保原生模块与当前 Electron ABI 匹配：
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+不要把其他机器生成的 `node_modules` 或原生 `.node` 文件直接复制到当前环境。
+
+## Windows 打包失败
+
+先运行 `pnpm build` 排除代码和构建契约错误，再运行：
+
+```powershell
+pnpm dist:win
+# 或
+pnpm dist:win:portable
+```
+
+项目默认配置 Electron 镜像。网络受限时可设置 `ELECTRON_MIRROR`、`ELECTRON_BUILDER_BINARIES_MIRROR`，或配置 `HTTP_PROXY` 和 `HTTPS_PROXY`。超时后应只清理对应版本的不完整 Electron/electron-builder 缓存，再重试。
+
+## 提交问题时附带什么
+
+- 操作系统版本、显示器数量与缩放比例
+- LexiFlow 版本和目标应用名称
+- 可复现步骤与预期/实际行为
+- 已脱敏的诊断导出
+
+不要附带 API Key、原文、译文、文档正文或包含敏感内容的截图。

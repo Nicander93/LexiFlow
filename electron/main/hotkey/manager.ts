@@ -17,7 +17,9 @@ export class HotkeyManager {
       this.lastTriggeredAt = now;
       this.onTrigger(action);
     };
-    const translation = globalShortcut.register(settings.translation, () => trigger("translate"));
+    const translation = settings.enableSelectionTranslation
+      ? globalShortcut.register(settings.translation, () => trigger("translate"))
+      : true;
     const naming = globalShortcut.register(settings.naming, () => trigger("naming"));
     const screenshot = globalShortcut.register(settings.screenshot, () => trigger("ocr"));
     const errors: string[] = [];

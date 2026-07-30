@@ -3,7 +3,7 @@ import { clipboard, type NativeImage } from "electron";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import type { SelectionResult } from "../../shared/types";
-import { hasClipboardChanged } from "../core/validation";
+import { isCapturedSelection } from "../core/validation";
 
 const execFileAsync = promisify(execFile);
 const COPY_COMMAND = "$ws = New-Object -ComObject WScript.Shell; $ws.SendKeys('^c')";
@@ -52,7 +52,7 @@ export async function captureSelectedText(maxLength: number): Promise<SelectionR
       await wait(40);
       selectedText = clipboard.readText();
     }
-    if (!hasClipboardChanged(snapshot.text, selectedText, marker)) {
+    if (!isCapturedSelection(selectedText, marker)) {
       return { text: "", error: "未检测到选中文字，请重新选择或手动输入。" };
     }
     if (selectedText.length > maxLength) {

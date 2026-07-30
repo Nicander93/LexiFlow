@@ -13,7 +13,7 @@ function isSentenceBoundary(text: string, index: number): boolean {
   return !/[0-9]/.test(previous) && (!next || /\s|[”）)]/.test(next));
 }
 
-function appendSegment(text: string, start: number, end: number, output: SourceSegment[]): void {
+function appendSegment(text: string, start: number, end: number, output: SourceSegment[], paragraphIndex: number, boundaryAfter: SourceSegment["boundaryAfter"]): void {
   let sourceStart = start;
   let sourceEnd = end;
   while (sourceStart < sourceEnd && /\s/.test(text[sourceStart])) sourceStart += 1;
@@ -23,7 +23,9 @@ function appendSegment(text: string, start: number, end: number, output: SourceS
     id: `segment-${output.length + 1}`,
     source: text.slice(sourceStart, sourceEnd),
     sourceStart,
-    sourceEnd
+    sourceEnd,
+    paragraphIndex,
+    boundaryAfter
   });
 }
 
@@ -72,7 +74,7 @@ function findClauseBoundaries(text: string, start: number, end: number): number[
   return boundaries;
 }
 
-function pushSegment(text: string, start: number, end: number, output: SourceSegment[]): void {
+function pushSegment(text: string, start: number, end: number, output: SourceSegment[], paragraphIndex: number, boundaryAfter: SourceSegment["boundaryAfter"] = "sentence"): void {
   let sourceStart = start;
   let sourceEnd = end;
   while (sourceStart < sourceEnd && /\s/.test(text[sourceStart])) sourceStart += 1;
@@ -83,16 +85,17 @@ function pushSegment(text: string, start: number, end: number, output: SourceSeg
   const boundaries = isLongSegment(source) ? findClauseBoundaries(text, sourceStart, sourceEnd) : [];
   let clauseStart = sourceStart;
   for (const boundary of boundaries) {
-    appendSegment(text, clauseStart, boundary, output);
+    appendSegment(text, clauseStart, boundary, output, paragraphIndex, "inline");
     clauseStart = boundary;
   }
-  appendSegment(text, clauseStart, sourceEnd, output);
+  appendSegment(text, clauseStart, sourceEnd, output, paragraphIndex, boundaryAfter);
 }
 
 /** Splits stable semantic clauses without relying on visual line wrapping. */
 export function splitIntoSegments(text: string): SourceSegment[] {
   const segments: SourceSegment[] = [];
   let start = 0;
+  let paragraphIndex = 0;
   let parenthesesDepth = 0;
 
   for (let index = 0; index < text.length; index += 1) {
@@ -122,17 +125,23 @@ export function splitIntoSegments(text: string): SourceSegment[] {
     }
     if (parenthesesDepth > 0) continue;
     if (char === "\n" && text[index + 1] === "\n") {
-      pushSegment(text, start, index, segments);
+      pushSegment(text, start, index, segments, paragraphIndex, "paragraph");
       while (text[index + 1] === "\n") index += 1;
+      start = index + 1;
+      paragraphIndex += 1;
+      continue;
+    }
+    if (char === "\n") {
+      pushSegment(text, start, index, segments, paragraphIndex, "line");
       start = index + 1;
       continue;
     }
     if (isSentenceBoundary(text, index)) {
-      pushSegment(text, start, index + 1, segments);
+      pushSegment(text, start, index + 1, segments, paragraphIndex, "sentence");
       start = index + 1;
     }
   }
 
-  pushSegment(text, start, text.length, segments);
+  pushSegment(text, start, text.length, segments, paragraphIndex, "sentence");
   return segments;
 }

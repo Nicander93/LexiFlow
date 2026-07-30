@@ -1,109 +1,96 @@
-# 架构说明
+# LexiFlow 架构说明
 
-LexiFlow 分为 Electron 主进程、preload 白名单桥和 Vue 渲染进程。按文件审查时优先看 [审查指南](review-guide.md)。
+LexiFlow 由 Electron 主进程、preload 白名单桥和 Vue 渲染进程组成。主进程持有所有系统能力与模型访问；渲染进程只通过 `TranslatorApi` 使用这些能力。
 
-- 主进程管理托盘、快捷键、窗口、剪贴板、Provider、设置、历史，以及 V3 的 Profile / 术语表 / OCR / 文档。
-- preload 仅暴露 `electron/shared/api.ts` 中的固定 API；通道名在 `IPC_CHANNELS`。
-- 渲染进程负责主窗口与悬浮窗 UI，不直接访问 Node.js 或模型服务。
-- `TranslationProvider` 统一 Ollama 与 OpenAI-compatible：健康检查、模型列表、流式翻译，以及结构化修复用的 `chat`。
-- 每次翻译都分配 requestId；新请求、停止、关闭悬浮窗和退出应用都会取消旧请求。
-- 设置与历史通过原子替换写入本地 JSON；API Key 单独使用操作系统安全存储加密。
-- `runtime.ping()` 做带 `apiVersion` 的连通检查；sandbox preload 固定为 CommonJS `.cjs`，主进程保持 ESM。
+## 进程拓扑
 
-选区读取会暂存剪贴板内容，写入唯一标记后模拟 Ctrl+C，轮询新文本并在 finally 中恢复原剪贴板。悬浮窗在复制前即进入 capturing 状态，模型响应不影响窗口出现速度。
+```text
+electron/main/index.ts
+  └─ bootstrap/application.ts
+       ├─ storage/*
+       ├─ provider/*
+       ├─ translation/manager.ts
+       ├─ document/manager.ts
+       ├─ selection/controller.ts
+       ├─ window/manager.ts
+       ├─ tray/manager.ts
+       └─ ipc/register.ts
+            └─ preload/index.ts
+                 └─ window.translator
+                      └─ Vue pages + features
+```
 
-## 模块地图
+`bootstrap/application.ts` 只负责实例化模块、连接接口和退出清理。具体生命周期由对应模块隐藏：划词由 `SelectionController` 管理，模型任务由 `ModelTaskScheduler` 管理，窗口由 `WindowManager` 管理。
+
+## 目录职责
 
 | 路径 | 职责 |
 | --- | --- |
-| `electron/main/index.ts` | 单实例、E2E 临时 userData，转交 bootstrap |
-| `electron/main/bootstrap/application.ts` | 装配 Store / Manager / IPC / 托盘与退出清理 |
-| `electron/main/ipc/register.ts` | `IPC_CHANNELS` → 各 Store/Manager |
-| `electron/main/core/` | 纯逻辑：访问校验、模型路由、prompt、结构化校验、文本清理、诊断 |
-| `electron/main/translation/` | 交互翻译编排、句段切分、结果组装、候选解析 |
-| `electron/main/document/` | 文档导入、分块、单并发队列、状态恢复 |
-| `electron/main/ocr/windows-ocr.ts` | 选屏截图 → 临时 PNG → Windows OCR → 识别后删除临时文件 |
-| `electron/main/dictionary/` | 本地 ECDICT 只读查词（与 TranslationManager 解耦） |
-| `electron/main/storage/` | 本地 JSON（含 schema 迁移）与 safeStorage |
+| `electron/main/bootstrap/` | 应用装配与退出顺序 |
+| `electron/main/core/` | 访问校验、模型路由、调度、prompt、结构化校验、文本清理和诊断 |
+| `electron/main/selection/` | 全局鼠标钩子适配、拖选判定、待确认文本与提示生命周期 |
+| `electron/main/translation/` | 交互翻译、Session、句段切分与结果组装 |
+| `electron/main/document/` | 导入、分块、后台队列、暂停/取消/恢复 |
+| `electron/main/dictionary/` | ECDICT 只读查询 |
+| `electron/main/ocr/` | Windows 截屏与 OCR |
+| `electron/main/storage/` | 设置、历史、术语表、Profile、文档任务和 schema 迁移 |
 | `electron/main/provider/` | Ollama / OpenAI-compatible 实现 |
-| `electron/shared/` | 类型、IPC 通道、默认设置、`PROMPT_VERSION`、质量检查 |
-| `electron/preload/index.ts` | `contextBridge` 白名单 |
-| `src/platform/translator.ts` | 取 preload API；非 Electron 时安装浏览器预览 stub |
-| `src/composables/useTranslation.ts` | 渲染侧翻译状态与 requestId 过滤 |
+| `electron/main/ipc/` | 通道注册与可信发送方校验 |
+| `electron/shared/` | `TranslatorApi`、`IPC_CHANNELS`、共享类型、默认值和纯逻辑 |
+| `src/features/` | 渲染侧按功能聚合的状态与 UI |
+| `src/pages/` | 路由页面和页面级编排 |
+| `src/platform/` | preload 获取与浏览器预览适配器 |
 
-`core/model-access-gate.resolveModelAccess` 是所有“会发送用户内容”的模型调用的统一入口判定；`core/model-concurrency-gate` 保证交互请求优先于文档后台分块。
+## 翻译主路径
 
-## V2 翻译数据与本地存储
+1. 渲染进程创建请求并保存当前 `requestId`。
+2. 主进程清理输入、解析 Profile，并通过 `resolveModelAccess()` 判定 Provider、模型和远程权限。
+3. `ModelTaskScheduler` 串行化模型生成；交互任务优先于后台文档分块。
+4. Provider 以流式事件返回结果，渲染进程丢弃旧 `requestId` 事件。
+5. 句段、候选和命名结果经过 schema 校验；失败时最多修复一次，再回退到安全结果。
+6. 结果写入当前 `TranslationSession`，按设置决定是否写入本地历史。
 
-- 主进程先进行文本清理和稳定句段切分。长句仅在可靠的逗号从句边界继续切分；URL、路径、代码块、数字、缩写与括号内容不会作为切分点。
-- Provider 只按本地生成的 `segmentId` 返回 JSON 句段译文。解析不完整或格式非法时，结果会回退为普通全文译文，渲染进程不会按文本相似度重新匹配句段。
-- 选词与输入查词优先走本地 ECDICT（`DictionaryService` → 只读 SQLite）；未命中或用户显式点“AI 翻译”再走模型。技术 Profile 的上下文解释仍通过 Provider 异步补充，并使用独立 requestId 支持取消。
-- `history.json` 当前为 `{ schemaVersion: 1, items: [...] }`。启动时会将旧数组格式和旧 `targetText` 字段迁移为当前格式；无效条目被跳过，迁移写回失败时内存里仍保留可用历史，翻译照常进行。
-- 词典数据库缺失或损坏时应用仍可启动；LLM 翻译不受影响。本地词典查询不写入翻译历史。
+普通翻译、局部重译、候选译法、词典上下文和文档分块都不得绕过模型访问校验和任务调度。
 
-## V3 能力边界与数据流
+## 划词路径
 
-### 模型访问统一校验
+1. `uiohook-napi` 适配器只向内部接口暴露全局 `mousedown` / `mouseup`。
+2. `SelectionMonitor` 判定有效拖选，并将物理屏幕坐标转换为 Electron DIP。
+3. 选区仍拥有焦点时，主进程临时保存剪贴板、模拟 `Ctrl+C`、读取文本并恢复剪贴板。
+4. `SelectionController` 缓存待确认文本，在选区下方显示 Logo。
+5. 用户点击 Logo 后，控制器消费缓存文本并打开快速翻译窗；取消、超时或关闭开关会清空缓存。
 
-所有会发送用户内容的模型调用（普通翻译、局部重译、候选译法、上下文词典、文档分块、结构化修复请求）都必须先过 `resolveModelAccess()`：
+## IPC 与安全
 
-1. Profile `allowRemote === false` 时禁止 `openai-compatible`；
-2. 远程 Provider 必须 `remoteUsageConfirmed === true`；
-3. Profile 指定模型优先，否则按模型路由选择。
+渲染进程启用 `contextIsolation: true`、`nodeIntegration: false` 和 sandbox。新 IPC 必须同步：
 
-调用链不得自行绕过。交互请求通过 `ModelConcurrencyGate` 优先于文档后台分块。
+- `electron/shared/types.ts` 的 `IPC_CHANNELS`
+- `electron/shared/api.ts` 的 `TranslatorApi`
+- `electron/preload/index.ts`
+- `electron/main/ipc/register.ts`
+- `src/platform/translator.ts` 浏览器预览适配器
 
-### IPC 边界（V3 增量）
+敏感 IPC 使用 `assertTrustedSender()` 校验主 Frame 与来源。preload 产物固定为 CommonJS `.cjs`，主进程保持 ESM。
 
-| 能力 | 主进程 | Preload / Renderer |
-| --- | --- | --- |
-| Glossary | `glossary:*` CRUD / CSV / 冲突检测；按源/目标语言筛选命中项 | 设置页编辑；翻译页命中校验与“加入术语表” |
-| Dictionary | `dictionary:lookup` / `dictionary:status`；只读 ECDICT | 主窗口自动查词；悬浮窗词典优先；`dictionary:context:*` 仍为模型补充解释 |
-| Profile | `profile:*`；`allowRemote` / `modelId` / 词典模式 | 翻译、弹窗、文档导入选择 Profile |
-| OCR | `ocr:list-screens` / `ocr:capture`；`ocr:capture-requested` 推送；临时 PNG 识别后删除 | 选屏 + 预览框选；可编辑识别文本；不持久化原图 |
-| Document | `document:*` invoke；`document:event` 推送任务进度；单并发队列；失败分块可重试 | 文档页导入/暂停/取消/导出 |
-| 隐私 | `privacy:clear-local-data`；`diagnostics:export` | 设置页确认清除；导出脱敏诊断 |
+## 本地数据与隐私
 
-流式类通道（翻译 / 重译 / 候选 / 词典上下文）均为 `*:start` + `*:cancel` + `*:event`；渲染侧用 requestId 丢弃过期事件。
+| 数据 | 存储 |
+| --- | --- |
+| 设置 | `settings.json`，API Key 除外 |
+| API Key | Electron `safeStorage` |
+| 历史 | `history.json`，带迁移 |
+| Profile | `profiles.json`，带 schemaVersion |
+| 文档任务 | `document-tasks.json`，带 schemaVersion |
+| 术语表 | 本地 JSON |
+| 词典 | 安装包内只读 SQLite |
 
-### 本地 JSON schema
+诊断导出不得包含原文、译文、文档正文或 API Key。OCR 临时图片在 `finally` 中删除。
 
-| 文件 | schemaVersion | 迁移要点 |
-| --- | --- | --- |
-| `history.json` | 1 | 旧数组 / `targetText` → `items[].resultText`；迁移写失败不妨碍启动 |
-| `profiles.json` | 1 | 缺省 `allowRemote` 视为允许，保持旧数据可用 |
-| `document-tasks.json` | 1 | 保留 `failedChunks`；启动恢复中断任务为 paused |
-| `dictionary-cache.json` | — | 已弃用；查词改为只读 ECDICT，不再写用户缓存 |
-| `settings.json` | — | API Key 不落明文，走 safeStorage |
-| 诊断导出 | 1 | 仅环境信息与匿名解析失败计数 |
+## 构建契约
 
-结构化输出与结果字段与 `PROMPT_VERSION`（当前 `v3.1`）绑定；改 schema 或句段 JSON 规则时同步 bump。质量检查在 `electron/shared/quality.ts`（主进程与渲染进程共用），别用同名变量盖住全局 `URL`。
-
-### 结构化输出
-
-句段、候选译法、命名结果先做 schema 校验；失败则发起一次修复请求（只回传原始模型输出与 schema）。二次失败时回退普通文本/安全命名结构，界面不留空白。匿名失败计数写入诊断，不记录原文、译文或 API Key。
-
-### 候选译法产品规则（已确认实现）
-
-PRD 同时出现“默认 3 个”和四类标签（推荐/直译/自然/正式）。当前实现统一为 **3 个候选**：`推荐译法`、`直译`、`正式表达`。Prompt、解析器、UI 与测试保持一致；若产品后续要纳入“自然表达”，需同步改 schema 与数量规则。
-
-### OCR 第一阶段限制
-
-不提供原生跨屏区域框选。流程为：选择屏幕 → 全屏截图预览 → 在预览中框选/点选文本块 → 可编辑后送入翻译。临时 PNG 仅用于识别，成功或失败后删除。
-
-## 启动与验证
-
-- `electron/main/index.ts` 只负责单实例与失败退出，应用装配集中在 `bootstrap/application.ts`。
-- preload 加载失败或 renderer 崩溃会在主进程留下不含请求正文的诊断信息。
-- 生产环境缺少 preload API 时，渲染层显示明确的启动诊断页，不再静默白屏。
-- `scripts/verify-build.mjs` 验证 main、preload 与 renderer 的产物契约。
-- Playwright Electron E2E 在 Windows 上附带 `--disable-gpu --disable-software-rasterizer --in-process-gpu`，并保留 `LEXIFLOW_E2E=1` 的硬件加速与 sandbox 降级；设置 `LEXIFLOW_E2E_MODEL` 后会追加 Ollama 真机翻译测试；设置 `LEXIFLOW_EXECUTABLE` 可对打包产物做冒烟。
-
-## 样式结构
-
-- `tokens.css`：颜色、圆角、阴影和动效变量。
-- `base.css`：全局元素、输入控件与可访问性基础。
-- `layout.css`：整体布局、侧栏和页面容器。
-- `components.css`：按钮、状态、通用面板与反馈。
-- `pages.css`：翻译、命名、历史、文档、设置和关于页布局。
-- `popup.css`：独立的悬浮翻译窗口样式。
+- Renderer：`dist/`
+- Main ESM：`dist-electron/main/index.js`
+- Preload CJS：`dist-electron/preload/index.cjs`
+- 原生依赖通过 `asarUnpack` 分发
+- ECDICT 通过 `extraResources` 分发
+- `scripts/verify-build.mjs` 在构建后验证入口和资源契约

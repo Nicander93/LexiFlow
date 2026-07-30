@@ -13,8 +13,7 @@ export function validateInput(text: string, maxLength: number): ValidationResult
 /**
  * Selection flow writes a marker first; still-marker or empty means capture failed.
  * 划词前写入 marker；仍是 marker 或空串说明没拿到真实选区。
- * before is unused today; kept so call-site signatures stay stable.
  */
-export function hasClipboardChanged(_before: string, after: string, marker: string): boolean {
+export function isCapturedSelection(after: string, marker: string): boolean {
   return after !== marker && after.trim().length > 0;
 }

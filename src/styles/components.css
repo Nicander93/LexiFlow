@@ -49,9 +49,11 @@
 .segment-text--target { color: var(--ink); }
 .translation-segment { border-radius: 7px; outline: none; transition: background-color .05s ease, box-shadow .05s ease; }
 .translation-segment + .translation-segment::before { content: " "; white-space: pre; }
-.segment-text--target .translation-segment { display: block; margin-bottom: 7px; }
+.segment-text--target .translation-segment { display: inline; }
 .segment-text--target .translation-segment + .translation-segment::before { content: none; }
 .translation-segment.active, .translation-segment:focus-visible { background: rgba(22,119,255,.14); box-shadow: 0 0 0 2px rgba(22,119,255,.18); }
+.result-panel .copy-actions { display: flex; gap: 7px; opacity: 0; pointer-events: none; transform: translateY(-2px); transition: opacity 120ms ease, transform 120ms ease; }
+.result-panel:hover .copy-actions, .result-panel:focus-within .copy-actions { opacity: 1; pointer-events: auto; transform: translateY(0); }
 @keyframes blink { 50% { opacity: 0; } }
 .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #c9d7e8; border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

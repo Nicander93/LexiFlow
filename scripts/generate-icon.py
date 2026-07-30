@@ -4,7 +4,7 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "logo.png"
+SOURCE = ROOT / "src" / "assets" / "logo.png"
 OUTPUT = ROOT / "build"
 SIZE = 1024
 ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]

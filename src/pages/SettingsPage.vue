@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import PageHeader from "../components/PageHeader.vue";
-import AppIcon from "../components/AppIcon.vue";
-import SettingsSection from "../components/SettingsSection.vue";
+import SettingsSection from "../features/settings/SettingsSection.vue";
 import { DEFAULT_PROMPTS } from "../../electron/shared/defaults";
 import type { AppSettings, GlossaryConflict, GlossaryEntry, ProviderModel, TranslationProfile } from "../../electron/shared/types";
 import { getTranslatorApi } from "../platform/translator";
@@ -35,6 +34,8 @@ const showClearDataConfirm = ref(false);
 const apiKeyDraft = ref("");
 const apiKeyConfigured = ref(false);
 const translator = getTranslatorApi();
+let autoSaveTimer: ReturnType<typeof setTimeout> | undefined;
+let applyingSavedSettings = false;
 const glossaryGroups = computed(() => {
   const groups = new Map<string, GlossaryEntry[]>();
   for (const entry of glossary.value) {
@@ -62,18 +63,25 @@ function buildSettingsPayload(): AppSettings {
 }
 
 async function save(): Promise<boolean> {
-  if (!settings.value) return false;
-  if (settings.value.provider.type === "openai-compatible" && !settings.value.provider.remoteUsageConfirmed) {
+  if (!settings.value || saving.value) return false;
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = undefined;
+  }
+  const requiresRemoteConfirmation = settings.value.provider.type === "openai-compatible" && !settings.value.provider.remoteUsageConfirmed;
+  if (requiresRemoteConfirmation) {
     const accepted = window.confirm("远程模型会收到待翻译内容。请确认你已了解该服务的隐私政策，并同意将内容发送给此远程服务。");
     if (!accepted) return false;
-    settings.value.provider.remoteUsageConfirmed = true;
   }
-  if (settings.value.provider.type === "ollama") settings.value.provider.remoteUsageConfirmed = false;
   saving.value = true;
+  applyingSavedSettings = true;
+  if (requiresRemoteConfirmation) settings.value.provider.remoteUsageConfirmed = true;
+  if (settings.value.provider.type === "ollama") settings.value.provider.remoteUsageConfirmed = false;
   try {
     const result = await translator.settings.update(buildSettingsPayload());
     settings.value = result.settings;
     syncApiKeyState(result.settings);
+    await nextTick();
     if (result.shortcutResult.errors.length) notify(result.shortcutResult.errors.join("\n"), "error");
     else notify("设置已保存。");
     return true;
@@ -81,9 +89,23 @@ async function save(): Promise<boolean> {
     notify(error instanceof Error ? error.message : "设置保存失败。", "error");
     return false;
   } finally {
+    applyingSavedSettings = false;
     saving.value = false;
   }
 }
+
+/** 在用户暂停编辑后保存，避免输入过程中产生频繁 IPC 调用。 */
+function scheduleAutoSave(): void {
+  if (!settings.value || applyingSavedSettings) return;
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = undefined;
+    void save();
+  }, 600);
+}
+
+watch(settings, scheduleAutoSave, { deep: true });
+watch(apiKeyDraft, scheduleAutoSave);
 
 async function checkHealth(): Promise<void> {
   checking.value = true;
@@ -184,13 +206,15 @@ onMounted(async () => {
     loadError.value = error instanceof Error ? error.message : "无法读取本地设置。";
   }
 });
+
+onUnmounted(() => {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+});
 </script>
 
 <template>
   <div class="page settings-page">
-    <PageHeader title="设置">
-      <button class="primary-button" :disabled="!settings || saving" @click="save"><AppIcon name="check" :size="15" />{{ saving ? '正在保存' : '保存设置' }}</button>
-    </PageHeader>
+    <PageHeader title="设置" />
     <div v-if="message" class="toast" :class="messageType">{{ message }}</div>
     <div v-if="loadError" class="error-card">{{ loadError }}</div>
     <div v-else-if="!settings" class="surface loading-card"><span class="spinner" />正在读取本地设置</div>
@@ -215,7 +239,8 @@ onMounted(async () => {
       <SettingsSection icon="keyboard" title="全局快捷键" description="使用 Electron accelerator 格式，例如 Ctrl+Alt+T">
         <template #aside><label class="ios-switch" title="暂停快捷键"><input v-model="settings.shortcuts.paused" type="checkbox" /><span /></label></template>
         <div class="form-grid">
-          <label>快速翻译<input v-model="settings.shortcuts.translation" /></label>
+        <div class="toggle-list selection-translation-toggle"><div class="toggle-row"><span>启用划词翻译</span><label class="ios-switch"><input v-model="settings.shortcuts.enableSelectionTranslation" type="checkbox" /><span /></label></div><small class="shortcut-setting-hint">选中文字后显示悬浮翻译按钮，点击后打开快速翻译。</small></div>
+          <label>快速翻译<input v-model="settings.shortcuts.translation" :disabled="!settings.shortcuts.enableSelectionTranslation" /></label>
           <label>编程命名<input v-model="settings.shortcuts.naming" /></label>
           <label>截图 OCR<input v-model="settings.shortcuts.screenshot" /></label>
           <label>快速翻译默认场景

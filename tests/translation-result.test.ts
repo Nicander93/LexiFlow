@@ -6,9 +6,9 @@ describe("本地句段切分", () => {
   it("按中英文句界和自然段生成稳定 ID 与原文位置", () => {
     const text = "First sentence. 第二句！\n\n第三段。";
     expect(splitIntoSegments(text)).toEqual([
-      { id: "segment-1", source: "First sentence.", sourceStart: 0, sourceEnd: 15 },
-      { id: "segment-2", source: "第二句！", sourceStart: 16, sourceEnd: 20 },
-      { id: "segment-3", source: "第三段。", sourceStart: 22, sourceEnd: 26 }
+      { id: "segment-1", source: "First sentence.", sourceStart: 0, sourceEnd: 15, paragraphIndex: 0, boundaryAfter: "sentence" },
+      { id: "segment-2", source: "第二句！", sourceStart: 16, sourceEnd: 20, paragraphIndex: 0, boundaryAfter: "sentence" },
+      { id: "segment-3", source: "第三段。", sourceStart: 22, sourceEnd: 26, paragraphIndex: 1, boundaryAfter: "sentence" }
     ]);
   });
 

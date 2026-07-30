@@ -1,17 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from "vue";
 import PageHeader from "../components/PageHeader.vue";
-import ResultPanel from "../components/ResultPanel.vue";
+import ResultPanel from "../features/translation/components/ResultPanel.vue";
 import AppIcon from "../components/AppIcon.vue";
-import DictionaryCard from "../components/dictionary/DictionaryCard.vue";
-import { useTranslation } from "../composables/useTranslation";
-import { useDictionary } from "../composables/useDictionary";
-import { useOcrCapture } from "../composables/useOcrCapture";
-import { useSegmentRevision } from "../composables/useSegmentRevision";
-import type { DictionaryLookupResult, SegmentRevision, TargetLanguage, TranslationMode, TranslationProfile, TranslationQualityIssue, TranslationSegment } from "../../electron/shared/types";
+import DictionaryCard from "../features/dictionary/components/DictionaryCard.vue";
+import { useTranslation } from "../features/translation/useTranslation";
+import { useDictionary } from "../features/dictionary/useDictionary";
+import { useOcrCapture } from "../features/ocr/useOcrCapture";
+import { useSegmentRevision } from "../features/translation/useSegmentRevision";
+import type { DictionaryLookupResult, SegmentRevision, TargetLanguage, TranslationMode, TranslationProfile, TranslationSegment } from "../../electron/shared/types";
 import { pickTargetDictionaryQuery, shouldLookupDictionary } from "../../electron/shared/dictionary-eligibility";
 import { getTranslatorApi } from "../platform/translator";
-import { checkTranslationQuality } from "../../electron/shared/quality";
 
 type ResultView = "dictionary" | "translation";
 
@@ -64,7 +63,6 @@ const dictionaryContextText = ref("");
 const dictionaryContextError = ref("");
 const dictionaryContextLoading = ref(false);
 const dictionaryContextRequestId = ref<string>();
-const qualityIssues = ref<TranslationQualityIssue[]>([]);
 const glossaryFromDictionary = ref({ sourceTerm: "", targetTerm: "" });
 const glossaryFromDictionaryNotice = ref("");
 
@@ -102,7 +100,6 @@ const {
   ocrResult,
   ocrLoading,
   ocrError,
-  ocrScreens,
   ocrScreenId,
   ocrImage,
   ocrSelection,
@@ -259,13 +256,6 @@ async function addDictionaryTermToGlossary(): Promise<void> {
   }
 }
 
-function runQualityCheck(): void {
-  qualityIssues.value = checkTranslationQuality(displaySegments.value, {
-    targetLanguage: result.value?.targetLanguage,
-    glossaryValidation: glossaryValidation.value
-  });
-}
-
 function closeOcr(): void {
   ocrResult.value = undefined;
   ocrSelection.value = undefined;
@@ -371,6 +361,18 @@ onMounted(async () => {
   targetLanguage.value = settings.translation.targetLanguage;
   providerLabel.value = settings.provider.type === "ollama" ? "本地模型" : "远程模型";
   profiles.value = await translator.profiles.list();
+  const quickSession = await translator.translation.getSession();
+  if (quickSession && !sourceText.value) {
+    sourceText.value = quickSession.sourceText;
+    profileId.value = quickSession.profileId;
+    targetLanguage.value = quickSession.targetLanguage;
+    resultText.value = quickSession.resultText;
+    if (quickSession.resultText || quickSession.segments.length) {
+      result.value = { requestId: quickSession.requestId ?? quickSession.id, sourceText: quickSession.sourceText, originalSourceText: quickSession.sourceText, targetText: quickSession.resultText, sourceLanguage: "", targetLanguage: quickSession.targetLanguage, segments: quickSession.segments, modelInfo: { provider: "ollama", model: "", durationMs: 0 }, createdAt: quickSession.createdAt };
+    }
+    status.value = quickSession.status;
+    lastTranslatedSource.value = quickSession.sourceText;
+  }
 
   const pending = sessionStorage.getItem("lexiflow:retranslate");
   if (!pending) return;
@@ -447,8 +449,7 @@ onUnmounted(() => {
         <label>目标语言<select v-model="targetLanguage"><option value="auto">自动识别</option><option value="zh-CN">中文</option><option value="en">英文</option></select></label>
         <label>Profile<select v-model="profileId" @change="onProfileChange"><option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option></select></label>
       </div>
-      <span v-if="copied" class="success-badge"><AppIcon name="check" :size="14" />已复制</span>
-      <span v-else class="status-chip">{{ providerLabel }}</span>
+      <span class="status-chip">{{ providerLabel }}</span>
     </PageHeader>
     <section v-if="ocrResult || ocrError" class="ocr-card surface">
       <div class="panel-toolbar">
@@ -476,8 +477,7 @@ onUnmounted(() => {
         <div class="panel-toolbar">
           <span>原文</span>
           <div class="control-inline">
-            <select v-if="ocrScreens.length" v-model="ocrScreenId" class="ocr-screen-select" title="选择 OCR 截图屏幕"><option v-for="screen in ocrScreens" :key="screen.id" :value="screen.id">{{ screen.primary ? '主屏 · ' : '' }}{{ screen.name }}（{{ screen.width }}×{{ screen.height }}）</option></select>
-            <button class="text-button" :disabled="ocrLoading" @click="captureOcr">{{ ocrLoading ? 'OCR 识别中' : 'OCR 截图' }}</button>
+            <button class="icon-button" :disabled="ocrLoading" title="截图识别" aria-label="截图识别" @click="captureOcr"><AppIcon name="search" :size="16" /></button>
             <button v-if="sourceText" class="text-button" @click="sourceText = ''">清空</button>
           </div>
         </div>
@@ -499,7 +499,6 @@ onUnmounted(() => {
             <button :class="{ active: showMainDictionary }" :disabled="!showDictionaryTab" @click="switchResultView('dictionary')">词典</button>
             <button :class="{ active: !showMainDictionary }" @click="switchResultView('translation')">AI 翻译</button>
           </div>
-          <button v-if="hasStructuredResult" class="text-button" @click="runQualityCheck">质量检查</button>
         </div>
         <div class="result-stack-body">
           <template v-if="showMainDictionary">
@@ -508,7 +507,7 @@ onUnmounted(() => {
           <template v-else>
             <p v-if="dictionaryStatus === 'not-found' && dictionaryEligible" class="dictionary-hint muted">本地词典未收录，将使用模型翻译。<span v-if="dictionarySuggestions.length">建议：{{ dictionarySuggestions.join('、') }}</span></p>
             <p v-else-if="dictionaryStatus === 'unavailable'" class="dictionary-hint muted">{{ autoDictionaryResult?.unavailableReason || '本地词典资源不可用，仍可使用 AI 翻译。' }}</p>
-            <ResultPanel :status="status" :text="displayResultText" :source-text="sourceText" :error="errorMessage" :warning="warningMessage" :segments="displaySegments" :active-segment-id="activeSegmentId" @copy="copyResult" @copy-source="copySource" @copy-bilingual="copyBilingual" @stop="stop" @retry="retry" @hover="handleSegmentHover" @toggle="toggleSegment" @clear="clearSegmentLock" @navigate="navigateSegment" @select-term="lookupDictionary" />
+            <ResultPanel :status="status" :text="displayResultText" :source-text="sourceText" :error="errorMessage" :warning="warningMessage" :segments="displaySegments" :active-segment-id="activeSegmentId" :copied="copied" @copy="copyResult" @copy-source="copySource" @copy-bilingual="copyBilingual" @stop="stop" @retry="retry" @hover="handleSegmentHover" @toggle="toggleSegment" @clear="clearSegmentLock" @navigate="navigateSegment" @select-term="lookupDictionary" />
           </template>
           <section v-if="dictionaryTerm" ref="dictionaryCard" class="dictionary-card surface" aria-live="polite">
             <div class="panel-toolbar"><span>词典 · {{ dictionaryTerm }}</span><button class="text-button" @click="closeDictionary">关闭</button></div>
@@ -546,8 +545,6 @@ onUnmounted(() => {
         </section>
       </section>
     </div>
-    <section v-if="qualityIssues.length" class="quality-card surface"><div class="panel-toolbar"><span>质量检查</span><button class="text-button" @click="qualityIssues = []">关闭</button></div><ul><li v-for="issue in qualityIssues" :key="`${issue.segmentId}-${issue.kind}`">{{ issue.message }}</li></ul></section>
-    <section v-if="glossaryValidation.length" class="quality-card surface"><div class="panel-toolbar"><span>术语校验</span><small>{{ glossaryValidation.filter((item) => item.applied).length }} / {{ glossaryValidation.length }} 已按术语表使用</small></div><ul><li v-for="item in glossaryValidation" :key="item.sourceTerm" :class="item.applied ? 'glossary-valid' : 'glossary-invalid'">{{ item.applied ? '✓' : '!' }} {{ item.sourceTerm }} → {{ item.targetTerm }}{{ item.applied ? '' : '（译文中未检测到）' }}</li></ul></section>
+    <section v-if="glossaryValidation.length" class="glossary-validation-card surface"><div class="panel-toolbar"><span>术语校验</span><small>{{ glossaryValidation.filter((item) => item.applied).length }} / {{ glossaryValidation.length }} 已按术语表使用</small></div><ul><li v-for="item in glossaryValidation" :key="item.sourceTerm" :class="item.applied ? 'glossary-valid' : 'glossary-invalid'">{{ item.applied ? '✓' : '!' }} {{ item.sourceTerm }} → {{ item.targetTerm }}{{ item.applied ? '' : '（译文中未检测到）' }}</li></ul></section>
   </div>
 </template>
-

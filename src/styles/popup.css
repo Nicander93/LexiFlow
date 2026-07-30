@@ -1,4 +1,4 @@
-.popup-shell { height: 100vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(89,111,145,.2); background: rgba(252,253,255,.96); }
+.popup-shell { min-height: 220px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(89,111,145,.2); background: rgba(252,253,255,.96); }
 .popup-header { height: 48px; flex: 0 0 48px; display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-bottom: 1px solid var(--border); background: rgba(245,248,252,.88); backdrop-filter: blur(20px); }
 .drag-region { -webkit-app-region: drag; }
 .no-drag, .no-drag * { -webkit-app-region: no-drag; }
@@ -7,10 +7,10 @@
 .popup-window-actions { display: flex; gap: 2px; }
 .popup-window-actions button { width: 32px; height: 30px; border: 0; border-radius: 9px; color: #66758b; background: transparent; font-size: 17px; transition: .18s ease; }
 .popup-window-actions button:hover { color: var(--accent); background: var(--accent-soft); }
-.popup-source { max-height: 140px; overflow: auto; flex-shrink: 0; border-bottom: 1px solid var(--border); background: rgba(249,251,254,.8); }
+.popup-source { max-height: 112px; overflow: auto; flex-shrink: 0; border-bottom: 1px solid var(--border); background: rgba(249,251,254,.8); }
 .source-toggle { width: 100%; display: flex; justify-content: space-between; padding: 9px 13px; border: 0; color: var(--muted); background: transparent; font-size: 10px; }
 .popup-source pre { padding: 0 13px 12px; font-family: inherit; font-size: 11px; line-height: 1.5; }
-.popup-result { flex: 1; min-height: 0; overflow: auto; }
+.popup-result { flex: 0 1 auto; min-height: 72px; max-height: 360px; overflow: auto; }
 .dictionary-compact-card { height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 8px; padding: 12px; }
 .dictionary-compact-scroll { min-height: 0; overflow: auto; display: grid; gap: 8px; align-content: start; }
 .popup-result > pre { padding: 15px; font-family: inherit; line-height: 1.65; font-size: 12px; }

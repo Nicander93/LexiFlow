@@ -1,0 +1,28 @@
+.selection-tip-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+.selection-tip-body::before { display: none; }
+.selection-tip {
+  width: 30px;
+  height: 30px;
+  margin: 2px;
+  padding: 3px;
+  border: 1px solid rgba(69, 96, 132, .2);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 4px 12px rgba(36, 61, 98, .22);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.selection-tip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(22, 119, 255, .25);
+}
+.selection-tip img {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}

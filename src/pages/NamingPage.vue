@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import PageHeader from "../components/PageHeader.vue";
-import { useTranslation } from "../composables/useTranslation";
+import { useTranslation } from "../features/translation/useTranslation";
 import type { NamingOptions, NamingResult } from "../../electron/shared/types";
 import { getTranslatorApi } from "../platform/translator";
 

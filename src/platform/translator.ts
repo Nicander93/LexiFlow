@@ -58,6 +58,7 @@ export function installBrowserPreviewApi(): void {
       getModels: async (): Promise<ProviderModel[]> => [{ id: "qwen3.5:9b", name: "qwen3.5:9b" }]
     },
     translation: {
+      getSession: async () => undefined,
       start: async (request) => {
         const requestId = crypto.randomUUID();
         queueMicrotask(() => listeners.forEach((listener) => listener({ requestId, status: "loading" })));
@@ -110,7 +111,9 @@ export function installBrowserPreviewApi(): void {
       onEvent: (listener) => { alternativesListeners.add(listener); return () => alternativesListeners.delete(listener); }
     },
     selection: {
-      capture: async () => ({ text: "" })
+      capture: async () => ({ text: "" }),
+      triggerTip: () => undefined,
+      dismissTip: () => undefined
     },
     history: {
       list: async () => structuredClone(history),

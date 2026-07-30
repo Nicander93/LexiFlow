@@ -31,6 +31,7 @@ import {
   type TranslationEvent,
   type TranslationHistory,
   type HistoryRevisionUpdate,
+  type TranslationSession,
   type TranslationRequest
   ,type TranslationProfile
 } from "../shared/types";
@@ -58,6 +59,7 @@ const api = {
     getModels: () => ipcRenderer.invoke(IPC_CHANNELS.providerModels)
   },
   translation: {
+    getSession: (): Promise<TranslationSession | undefined> => ipcRenderer.invoke(IPC_CHANNELS.translationSessionGet),
     start: (request: TranslationRequest): Promise<string> =>
       ipcRenderer.invoke(IPC_CHANNELS.translationStart, request),
     cancel: (requestId?: string): void => ipcRenderer.send(IPC_CHANNELS.translationCancel, requestId),
@@ -75,7 +77,9 @@ const api = {
     onEvent: (listener: (event: SegmentAlternativeEvent) => void): (() => void) => on(IPC_CHANNELS.alternativesEvent, listener)
   },
   selection: {
-    capture: (): Promise<SelectionResult> => ipcRenderer.invoke(IPC_CHANNELS.selectionCapture)
+    capture: (): Promise<SelectionResult> => ipcRenderer.invoke(IPC_CHANNELS.selectionCapture),
+    triggerTip: (): void => ipcRenderer.send(IPC_CHANNELS.selectionTipTrigger),
+    dismissTip: (): void => ipcRenderer.send(IPC_CHANNELS.selectionTipDismiss)
   },
   history: {
     list: (): Promise<TranslationHistory[]> => ipcRenderer.invoke(IPC_CHANNELS.historyList),
@@ -135,8 +139,8 @@ const api = {
     openMain: (route?: string): void => ipcRenderer.send(IPC_CHANNELS.windowOpenMain, route),
     closePopup: (): void => ipcRenderer.send(IPC_CHANNELS.popupClose),
     pinPopup: (pinned: boolean): void => ipcRenderer.send(IPC_CHANNELS.popupPin, pinned),
-    adaptPopupHeight: (kind?: "dictionary" | "translation" | "naming" | "default"): void =>
-      ipcRenderer.send(IPC_CHANNELS.popupAdaptHeight, kind),
+    adaptPopupHeight: (kind?: "dictionary" | "translation" | "naming" | "default", contentHeight?: number): void =>
+      ipcRenderer.send(IPC_CHANNELS.popupAdaptHeight, kind, contentHeight),
     onPopupPayload: (listener: (payload: PopupPayload) => void): (() => void) =>
       on(IPC_CHANNELS.popupPayload, listener),
     onNavigate: (listener: (route: string) => void): (() => void) => on("navigation:open", listener)

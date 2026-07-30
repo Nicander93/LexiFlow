@@ -1,5 +1,6 @@
 allowBuilds:
   electron: true
   electron-winstaller: true
+  uiohook-napi: true
 patchedDependencies:
   app-builder-lib@26.15.3: patches/app-builder-lib@26.15.3.patch

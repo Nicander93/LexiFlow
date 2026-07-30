@@ -15,7 +15,7 @@ export default defineConfig({
           build: {
             outDir: fromRoot("dist-electron/main"),
             rolldownOptions: {
-              external: ["pdf-parse", "@napi-rs/canvas", "node:sqlite"],
+              external: ["pdf-parse", "@napi-rs/canvas", "node:sqlite", "uiohook-napi"],
               output: {
                 entryFileNames: "index.js"
               }
