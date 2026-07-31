@@ -3,7 +3,7 @@
  * 退出时取消模型请求；history.retention === clear-on-exit 时先清历史再真正退出。
  * 托盘应用：window-all-closed 不得结束进程。
  */
-import { app, screen } from "electron";
+import { app, Menu, screen } from "electron";
 import type { AppSettings, TranslationMode } from "../../shared/types";
 import { captureSelectedText } from "../clipboard/selection";
 import { modeShortcutForProfile } from "../core/translation-policy";
@@ -26,6 +26,7 @@ import { createGlobalMouseHook } from "../selection/uiohook-adapter";
 
 export async function bootstrapApplication(): Promise<void> {
   await app.whenReady();
+  Menu.setApplicationMenu(null);
 
   const settingsStore = new SettingsStore();
   const historyStore = new HistoryStore();
@@ -91,13 +92,16 @@ export async function bootstrapApplication(): Promise<void> {
   let trayManager: TrayManager;
 
   const applySettings = (settings: AppSettings) => {
-    app.setLoginItemSettings({ openAtLogin: settings.startup.enabled });
+    windowManager.setFontSize(settings.window.fontSize);
     const shortcutResult = hotkeyManager.register(settings.shortcuts);
+    if (shortcutResult.errors.length) return shortcutResult;
     try {
-      selectionController.setEnabled(settings.shortcuts.enableSelectionTranslation && !settings.shortcuts.paused);
+      selectionController.setEnabled(settings.shortcuts.enableSelectionTranslation);
     } catch {
-      shortcutResult.errors.push("?????????????????");
+      shortcutResult.errors.push("无法启用划词监听，请重新安装应用后重试。");
+      return shortcutResult;
     }
+    app.setLoginItemSettings({ openAtLogin: settings.startup.enabled });
     trayManager.update(settings.shortcuts);
     return shortcutResult;
   };
@@ -116,9 +120,17 @@ export async function bootstrapApplication(): Promise<void> {
     screenshot: () => void windowManager.requestOcrCapture(),
     openSettings: () => void windowManager.showMainWindow("/settings"),
     togglePaused: (paused) => {
-      const settings = settingsStore.get();
-      settings.shortcuts.paused = paused;
-      void settingsStore.update(settings).then(() => applySettings(settingsStore.get()));
+      const previous = settingsStore.get();
+      const next = structuredClone(previous);
+      next.shortcuts.paused = paused;
+      const shortcutResult = applySettings(next);
+      if (shortcutResult.errors.length) {
+        applySettings(previous);
+        return;
+      }
+      void settingsStore.update(next).catch(() => {
+        applySettings(previous);
+      });
     },
     quit: () => app.quit()
   });

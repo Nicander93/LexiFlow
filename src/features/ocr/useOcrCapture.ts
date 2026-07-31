@@ -113,6 +113,7 @@ export function useOcrCapture(options: {
   });
 
   let removeCaptureListener: (() => void) | undefined;
+  const handleSidebarCapture = (): void => { void captureOcr(); };
   onMounted(async () => {
     try {
       ocrScreens.value = await translator.ocr.listScreens();
@@ -123,8 +124,12 @@ export function useOcrCapture(options: {
     removeCaptureListener = translator.ocr.onCaptureRequested(() => {
       void captureOcr();
     });
+    window.addEventListener("lexiflow:ocr-capture", handleSidebarCapture);
   });
-  onUnmounted(() => removeCaptureListener?.());
+  onUnmounted(() => {
+    removeCaptureListener?.();
+    window.removeEventListener("lexiflow:ocr-capture", handleSidebarCapture);
+  });
 
   return {
     ocrResult,

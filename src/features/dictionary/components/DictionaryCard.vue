@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import AppIcon from "../../../components/AppIcon.vue";
 import type { DictionaryEntry } from "../../../../electron/shared/types";
 import { canSpeakEnglish, speakEnglish } from "../speech";
 import DictionarySenses from "./DictionarySenses.vue";
@@ -16,12 +17,15 @@ const emit = defineEmits<{
 
 const showDefinitions = ref(false);
 const showMeta = ref(false);
+const copied = ref(false);
 const speechAvailable = computed(() => canSpeakEnglish());
 const hasDefinitions = computed(() => props.entry.senses.some((sense) => sense.definitions?.length));
 const hasMeta = computed(() => Boolean(props.entry.labels.bncRank || props.entry.labels.contemporaryRank));
 
 async function copyHeadword(): Promise<void> {
   await navigator.clipboard?.writeText(props.entry.headword);
+  copied.value = true;
+  window.setTimeout(() => { copied.value = false; }, 1400);
 }
 
 function speak(lang: "en-GB" | "en-US"): void {
@@ -33,7 +37,7 @@ function speak(lang: "en-GB" | "en-US"): void {
   <article class="dictionary-card-panel">
     <header class="dictionary-card-header">
       <h3>{{ entry.headword }}</h3>
-      <button class="text-button" type="button" @click="copyHeadword">复制</button>
+      <button class="icon-button dictionary-copy-button" type="button" :title="copied ? '已复制' : '复制词头'" :aria-label="copied ? '已复制' : '复制词头'" @click="copyHeadword"><AppIcon :name="copied ? 'check' : 'copy'" :size="15" /></button>
     </header>
     <div class="dictionary-phonetic-row">
       <span v-if="entry.phonetic" class="dictionary-phonetic">{{ entry.phonetic }}</span>

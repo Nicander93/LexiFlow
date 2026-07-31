@@ -10,7 +10,7 @@ LexiFlow 是面向 Windows 的本地优先桌面翻译工具，支持划词提�
 - Profile、术语表、句段对照、局部重译与候选译法
 - 本地 ECDICT 词典与按需上下文解释
 - Windows OCR 与轻量文档翻译
-- 自动保存设置、本地历史、收藏与脱敏诊断
+- 分类设置页、按键录制快捷键、失败回滚、本地历史、收藏与脱敏诊断
 - API Key 使用 Electron `safeStorage` 加密
 
 ## 开发

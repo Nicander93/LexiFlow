@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { captureSelectedText } from "../clipboard/selection";
 import { buildDiagnosticReport } from "../core/diagnostics";
 import { validateSettings } from "../core/settings-validation";
+import { updateSettingsTransaction } from "../core/settings-transaction";
 import { createProvider } from "../provider";
 import type { HistoryStore } from "../storage/history";
 import type { DictionaryService } from "../dictionary/dictionary-service";
@@ -25,6 +26,7 @@ import { assertTrustedSender } from "./security";
 import {
   IPC_CHANNELS,
   type AppSettings,
+  type ShortcutRegistrationResult,
   type DictionaryContextRequest,
   type DictionaryLookupRequest,
   type SegmentRevisionRequest,
@@ -44,7 +46,7 @@ interface IpcDependencies {
   translationManager: TranslationManager;
   translationSessionStore: TranslationSessionStore;
   windowManager: WindowManager;
-  applySettings: (settings: AppSettings) => unknown;
+  applySettings: (settings: AppSettings) => ShortcutRegistrationResult;
   clearLocalData: () => Promise<void>;
   triggerSelectionTip: () => void;
   dismissSelectionTip: () => void;
@@ -69,13 +71,15 @@ export function registerIpcHandlers(dependencies: IpcDependencies): void {
   }));
   ipcMain.handle(IPC_CHANNELS.settingsGet, () => settingsStore.getPublic());
   ipcMain.handle(IPC_CHANNELS.settingsUpdate, withTrustedSender(async (_event, settings: AppSettings) => {
-    const errors = validateSettings(settings);
-    if (errors.length) throw new Error(errors.join("\n"));
-    const updated = await settingsStore.update(settings);
-    await historyStore.prune(updated.history);
-    return { settings: updated, shortcutResult: dependencies.applySettings(settingsStore.get()) };
-  }));
-  ipcMain.handle(IPC_CHANNELS.providerHealth, async () => createProvider(settingsStore.get()).healthCheck());
+    const result = await updateSettingsTransaction(settings, {
+      getCurrent: () => settingsStore.get(),
+      validate: validateSettings,
+      apply: dependencies.applySettings,
+      persist: (next) => settingsStore.update(next)
+    });
+    await historyStore.prune(result.settings.history);
+    return result;
+  }));  ipcMain.handle(IPC_CHANNELS.providerHealth, async () => createProvider(settingsStore.get()).healthCheck());
   ipcMain.handle(IPC_CHANNELS.providerModels, async () => createProvider(settingsStore.get()).getModels());
   ipcMain.handle(IPC_CHANNELS.translationSessionGet, () => translationSessionStore.getActive());
   ipcMain.handle(IPC_CHANNELS.translationStart, (event, request: TranslationRequest) => translationManager.start(event.sender, request));

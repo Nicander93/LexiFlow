@@ -478,7 +478,7 @@ onUnmounted(() => {
           <span>原文</span>
           <div class="control-inline">
             <button class="icon-button" :disabled="ocrLoading" title="截图识别" aria-label="截图识别" @click="captureOcr"><AppIcon name="search" :size="16" /></button>
-            <button v-if="sourceText" class="text-button" @click="sourceText = ''">清空</button>
+            <button v-if="sourceText" class="icon-button" type="button" title="清空原文" aria-label="清空原文" @click="sourceText = ''"><AppIcon name="trash" :size="15" /></button>
           </div>
         </div>
         <div v-if="cleanupNotice" class="cleanup-notice">

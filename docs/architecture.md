@@ -28,6 +28,7 @@ electron/main/index.ts
 | --- | --- |
 | `electron/main/bootstrap/` | 应用装配与退出顺序 |
 | `electron/main/core/` | 访问校验、模型路由、调度、prompt、结构化校验、文本清理和诊断 |
+| `electron/main/core/settings-transaction.ts` | 设置先注册后持久化，失败回滚运行时快捷键 |
 | `electron/main/selection/` | 全局鼠标钩子适配、拖选判定、待确认文本与提示生命周期 |
 | `electron/main/translation/` | 交互翻译、Session、句段切分与结果组装 |
 | `electron/main/document/` | 导入、分块、后台队列、暂停/取消/恢复 |

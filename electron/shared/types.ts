@@ -372,6 +372,8 @@ export interface ModelRoutingSettings {
 export interface WindowSettings {
   closeAction: "hide" | "quit";
   autoHidePopup: boolean;
+  /** 主界面字号，作为原生放大/缩小菜单的持久化替代。 */
+  fontSize: number;
   popupBounds?: {
     width: number;
     height: number;

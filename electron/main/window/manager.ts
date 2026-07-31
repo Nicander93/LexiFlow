@@ -12,6 +12,7 @@ export class WindowManager {
   private selectionTipWindow: BrowserWindow | null = null;
   private selectionTipTimer?: ReturnType<typeof setTimeout>;
   private popupPinned = false;
+  private fontSize = 14;
   private isQuitting = false;
   private rememberingBounds = false;
 
@@ -36,6 +37,8 @@ export class WindowManager {
         sandbox: process.env.LEXIFLOW_E2E !== "1"
       }
     });
+    this.applyFontSize(window);
+    window.webContents.on("did-finish-load", () => this.applyFontSize(window));
     configureNavigationSecurity(window);
     window.webContents.on("preload-error", (_event, preloadPath, error) => {
       console.error(`Preload failed: ${preloadPath}`, error.message);
@@ -44,6 +47,19 @@ export class WindowManager {
       console.error(`Renderer process exited: ${details.reason} (${details.exitCode})`);
     });
     return window;
+  }
+
+  /** 将设置中的字号映射为 Electron 原生页面缩放比例。 */
+  private applyFontSize(window: BrowserWindow): void {
+    if (window.isDestroyed()) return;
+    window.webContents.setZoomFactor(this.fontSize / 14);
+  }
+
+  setFontSize(fontSize: number): void {
+    this.fontSize = fontSize;
+    for (const window of [this.mainWindow, this.popupWindow, this.selectionTipWindow]) {
+      if (window && !window.isDestroyed()) this.applyFontSize(window);
+    }
   }
 
   private async loadRenderer(window: BrowserWindow, route = "/"): Promise<void> {
@@ -59,9 +75,9 @@ export class WindowManager {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) return this.mainWindow;
     const window = this.createWindow({
       width: 960,
-      height: 780,
-      minWidth: 720,
-      minHeight: 600,
+      height: 680,
+      minWidth: 760,
+      minHeight: 560,
       show: false,
       title: "LexiFlow",
       icon: join(moduleDirectory, "../../build/icon.ico")

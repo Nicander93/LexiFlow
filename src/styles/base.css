@@ -6,19 +6,8 @@ body {
   min-height: 100vh;
   user-select: none;
   -webkit-user-select: none;
-  background:
-    radial-gradient(circle at 78% 4%, rgba(125, 184, 255, .16), transparent 28rem),
-    radial-gradient(circle at 42% 105%, rgba(176, 211, 255, .13), transparent 32rem),
-    #f3f6fb;
-}
-body::before {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  content: "";
-  opacity: .32;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+  color: var(--ink);
+  background: var(--app-bg);
 }
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
@@ -34,8 +23,9 @@ h1, h2, h3, p { text-wrap: pretty; }
 select, input, textarea {
   width: 100%;
   border: 1px solid var(--border);
+  min-height: 32px;
   border-radius: var(--radius-sm);
-  background: rgba(248, 250, 254, .94);
+  background: var(--surface);
   color: var(--ink);
   outline: none;
   padding: 7px 10px;

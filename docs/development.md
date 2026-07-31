@@ -25,6 +25,7 @@ electron/
     ocr/             Windows OCR
     provider/        Ollama / OpenAI-compatible
     selection/       全局划词监听、控制器与原生适配器
+    core/            访问校验、快捷键事务和模型调度
     storage/         本地 JSON 与 safeStorage
     translation/     交互翻译编排与 Session
     tray/            系统托盘
@@ -36,7 +37,7 @@ src/
   features/
     dictionary/      词典 UI、查询状态与发音
     ocr/             OCR 渲染状态
-    settings/        设置页局部 UI
+    settings/        设置布局、分类区块、按键录制与保存表单
     translation/     翻译状态、句段与结果 UI
   pages/             路由页面与页面级编排
   platform/          preload 获取与浏览器预览适配器
