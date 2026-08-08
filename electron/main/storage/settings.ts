@@ -83,8 +83,8 @@ export class SettingsStore {
     } else {
       this.volatileApiKey = "";
     }
-    this.value = stored;
     await this.store.write(stored);
+    this.value = stored;
     return this.getPublic();
   }
 

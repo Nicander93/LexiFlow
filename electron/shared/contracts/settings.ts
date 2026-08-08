@@ -26,7 +26,7 @@ export interface TranslationSettings {
 }
 export interface HistorySettings { enabled: boolean; maxItems: number; retention: "7d" | "30d" | "forever" | "clear-on-exit"; }
 export interface ModelRoutingSettings { enabled: boolean; shortTextMaxLength: number; shortTextModel?: string; documentModel?: string; }
-export interface WindowSettings { closeAction: "hide" | "quit"; autoHidePopup: boolean; popupBounds?: { width: number; height: number }; }
+export interface WindowSettings { closeAction: "hide" | "quit"; autoHidePopup: boolean; fontSize: number; popupBounds?: { width: number; height: number }; }
 export interface AppSettings { provider: ProviderConfig; shortcuts: ShortcutSettings; translation: TranslationSettings; history: HistorySettings; routing: ModelRoutingSettings; window: WindowSettings; startup: { enabled: boolean }; }
 export interface SettingsSnapshot { revision: number; settings: AppSettings; }
 export interface GeneralSettingsPatch { translation?: Partial<AppSettings["translation"]>; history?: Partial<AppSettings["history"]>; routing?: Partial<AppSettings["routing"]>; startup?: Partial<AppSettings["startup"]>; }

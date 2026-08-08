@@ -68,7 +68,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   window: {
     closeAction: "hide",
-    autoHidePopup: true
+    autoHidePopup: true,
+    fontSize: 14,
   },
   startup: {
     enabled: false

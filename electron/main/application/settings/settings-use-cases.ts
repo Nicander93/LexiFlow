@@ -6,6 +6,7 @@ import { applySettingsPatch, SettingsService, type SettingsRepository } from "./
 export interface SettingsEffects {
   applyShortcuts(settings: AppSettings): ShortcutRegistrationResult;
   applyStartup?: (settings: AppSettings) => void;
+  applyWindow?: (settings: AppSettings) => void;
 }
 
 /** Coordinates settings mutation, validation, runtime effects, and history pruning. */
@@ -38,7 +39,9 @@ export class SettingsUseCases {
   private applyEffectsIfNeeded(before: AppSettings, after: AppSettings): ShortcutRegistrationResult {
     const shortcutsChanged = JSON.stringify(before.shortcuts) !== JSON.stringify(after.shortcuts);
     const startupChanged = before.startup.enabled !== after.startup.enabled;
+    const windowChanged = JSON.stringify(before.window) !== JSON.stringify(after.window);
     if (startupChanged) this.effects.applyStartup?.(after);
+    if (windowChanged) this.effects.applyWindow?.(after);
     return shortcutsChanged
       ? this.effects.applyShortcuts(after)
       : { translation: true, naming: true, screenshot: true, errors: [] };

@@ -1,7 +1,15 @@
 import { globalShortcut } from "electron";
 import type { ShortcutRegistrationResult, ShortcutSettings } from "../../shared/types";
+import { normalizeShortcut } from "../../shared/shortcut";
 
 export type HotkeyAction = "translate" | "naming" | "ocr";
+
+function normalizeForRegistration(value: string): string {
+  const trimmed = value.trim();
+  // Keep Electron's cross-platform alias intact for existing user settings.
+  if (/^CommandOrControl(?:\+|$)/i.test(trimmed)) return trimmed;
+  return normalizeShortcut(trimmed);
+}
 
 export class HotkeyManager {
   private lastTriggeredAt = 0;
@@ -9,7 +17,25 @@ export class HotkeyManager {
 
   constructor(private readonly onTrigger: (action: HotkeyAction) => void) {}
 
+  /** 原子替换快捷键；任一注册失败时恢复上一组。 */
   register(settings: ShortcutSettings): ShortcutRegistrationResult {
+    const previous = this.lastSettings ? structuredClone(this.lastSettings) : undefined;
+    const result = this.registerUnsafe(settings);
+    if (result.errors.length) {
+      if (previous) this.registerUnsafe(previous);
+      else globalShortcut.unregisterAll();
+      return result;
+    }
+    this.lastSettings = structuredClone({
+      ...settings,
+      translation: normalizeForRegistration(settings.translation),
+      naming: normalizeForRegistration(settings.naming),
+      screenshot: normalizeForRegistration(settings.screenshot)
+    });
+    return result;
+  }
+
+  private registerUnsafe(settings: ShortcutSettings): ShortcutRegistrationResult {
     globalShortcut.unregisterAll();
     const result = this.registerCurrent(settings);
     if (result.errors.length) {
@@ -29,11 +55,13 @@ export class HotkeyManager {
       this.lastTriggeredAt = now;
       this.onTrigger(action);
     };
-    const translation = settings.enableSelectionTranslation
-      ? globalShortcut.register(settings.translation, () => trigger("translate"))
-      : true;
-    const naming = globalShortcut.register(settings.naming, () => trigger("naming"));
-    const screenshot = globalShortcut.register(settings.screenshot, () => trigger("ocr"));
+    const register = (value: string, action: HotkeyAction): boolean => {
+      const shortcut = normalizeForRegistration(value);
+      return !shortcut || globalShortcut.register(shortcut, () => trigger(action));
+    };
+    const translation = register(settings.translation, "translate");
+    const naming = register(settings.naming, "naming");
+    const screenshot = register(settings.screenshot, "ocr");
     const errors: string[] = [];
     if (!translation) errors.push(`快捷键 ${settings.translation} 注册失败，可能已被其他程序占用。`);
     if (!naming) errors.push(`快捷键 ${settings.naming} 注册失败，可能已被其他程序占用。`);

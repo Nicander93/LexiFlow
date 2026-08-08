@@ -3,7 +3,7 @@
  * 退出时取消模型请求；history.retention === clear-on-exit 时先清历史再真正退出。
  * 托盘应用：window-all-closed 不得结束进程。
  */
-import { app, clipboard, screen } from "electron";
+import { app, clipboard, Menu, screen } from "electron";
 import type { AppSettings, TranslationMode } from "../../shared/types";
 import { captureSelectedText } from "../clipboard/selection";
 import { RuntimeService } from "../application/runtime/runtime-service";
@@ -36,6 +36,7 @@ import { createProvider } from "../provider";
 
 export async function bootstrapApplication(): Promise<void> {
   await app.whenReady();
+  Menu.setApplicationMenu(null);
 
   const settingsStore = new SettingsStore();
   const settingsService = new SettingsService(settingsStore);
@@ -122,15 +123,22 @@ export async function bootstrapApplication(): Promise<void> {
   };
   const applyShortcuts = (settings: AppSettings) => {
     const shortcutResult = hotkeyManager.register(settings.shortcuts);
+    if (shortcutResult.errors.length) return shortcutResult;
     try {
-      selectionController.setEnabled(settings.shortcuts.enableSelectionTranslation && !settings.shortcuts.paused);
+      selectionController.setEnabled(settings.shortcuts.enableSelectionTranslation);
     } catch {
-      shortcutResult.errors.push("?????????????????");
+      shortcutResult.errors.push("无法启用划词监听，请重新安装应用后重试。");
+      return shortcutResult;
     }
+    app.setLoginItemSettings({ openAtLogin: settings.startup.enabled });
     trayManager.update(settings.shortcuts);
     return shortcutResult;
   };
+  const applyWindow = (settings: AppSettings): void => {
+    windowManager.setFontSize(settings.window.fontSize);
+  };
   const applySettings = (settings: AppSettings) => {
+    applyWindow(settings);
     applyStartup(settings);
     return applyShortcuts(settings);
   };
@@ -143,7 +151,7 @@ export async function bootstrapApplication(): Promise<void> {
     documentManager.resumeAccepting();
   };
 
-  settingsUseCases = new SettingsUseCases(settingsStore, settingsService, historyService, { applyShortcuts, applyStartup });
+  settingsUseCases = new SettingsUseCases(settingsStore, settingsService, historyService, { applyShortcuts, applyStartup, applyWindow });
 
   trayManager = new TrayManager({
     openMain: () => void windowManager.showMainWindow(),
