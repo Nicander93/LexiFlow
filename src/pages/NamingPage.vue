@@ -17,7 +17,7 @@ const namingResult = computed<NamingResult | null>(() => {
 });
 
 async function generate(): Promise<void> {
-  await start({ text: sourceText.value, mode: "naming", targetLanguage: "en", namingOptions: options.value });
+  await start({ text: sourceText.value, mode: "naming", targetLanguage: "en", namingOptions: options.value, surface: "main" });
 }
 
 async function copyName(name: string): Promise<void> {

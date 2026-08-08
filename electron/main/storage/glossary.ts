@@ -7,6 +7,7 @@ import { app } from "electron";
 import { join } from "node:path";
 import type { GlossaryConflict, GlossaryEntry, GlossaryImportResult } from "../../shared/types";
 import { JsonStore } from "./json-store";
+import { isStoredGlossary } from "./schema";
 
 const CSV_HEADERS = ["sourceTerm", "targetTerm", "sourceLanguage", "targetLanguage", "domain", "caseSensitive", "matchMode", "note", "enabled"] as const;
 
@@ -136,7 +137,13 @@ export function findGlossaryMatches(text: string, entries: GlossaryEntry[], sour
 export class GlossaryStore {
   private store!: JsonStore<GlossaryEntry[]>;
   private entries: GlossaryEntry[] = [];
-  async initialize(): Promise<void> { this.store = new JsonStore(join(app.getPath("userData"), "glossary.json"), []); this.entries = await this.store.read(); }
+  async initialize(): Promise<void> {
+    this.store = new JsonStore(join(app.getPath("userData"), "glossary.json"), [], {
+      backup: true,
+      validate: isStoredGlossary
+    });
+    this.entries = await this.store.read();
+  }
   list(): GlossaryEntry[] { return structuredClone(this.entries); }
   conflicts(): GlossaryConflict[] { return structuredClone(findGlossaryConflicts(this.entries)); }
   matches(text: string, sourceLanguage = "auto", targetLanguage = "auto"): Record<string, string> { return findGlossaryMatches(text, this.entries, sourceLanguage, targetLanguage); }

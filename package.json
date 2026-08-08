@@ -10,6 +10,10 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "node scripts/vue-typecheck.cjs --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "lint": "node scripts/check-architecture.mjs",
+    "format:check": "node scripts/check-format.mjs",
+    "check:architecture": "pnpm run lint",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm test && pnpm build",
     "build": "pnpm run typecheck && vite build && pnpm run verify:build",
     "verify:build": "node scripts/verify-build.mjs",
     "test": "vitest run",

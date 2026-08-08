@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { TranslationProfile } from "../../shared/types";
 import { DEFAULT_PROMPTS } from "../../shared/defaults";
 import { JsonStore } from "./json-store";
+import { isStoredProfiles } from "./schema";
 
 const BUILT_INS: TranslationProfile[] = [
   { id: "general", name: "通用翻译", description: "适用于日常阅读", systemPrompt: DEFAULT_PROMPTS.normal, sourceLanguage: "auto", targetLanguage: "auto", preserveMarkdown: false, preserveCode: true, enableGlossary: true, dictionaryMode: "basic", isBuiltIn: true },
@@ -19,7 +20,7 @@ const BUILT_INS: TranslationProfile[] = [
   { id: "natural-expression", name: "自然表达", description: "更符合目标语言的表达习惯", systemPrompt: `${DEFAULT_PROMPTS.normal}\n在不改变信息的前提下，以目标语言母语者自然、流畅的方式表达。`, sourceLanguage: "auto", targetLanguage: "auto", temperature: 0.35, preserveMarkdown: true, preserveCode: true, enableGlossary: true, dictionaryMode: "contextual", isBuiltIn: true }
 ];
 
-interface ProfilesFile {
+export interface ProfilesFile {
   schemaVersion: 1;
   profiles: TranslationProfile[];
 }
@@ -34,11 +35,14 @@ function normalizeProfile(profile: TranslationProfile): TranslationProfile {
 export function getBuiltInProfiles(): TranslationProfile[] { return structuredClone(BUILT_INS); }
 
 export class ProfileStore {
-  private store!: JsonStore<ProfilesFile>;
+  private store!: JsonStore<ProfilesFile | TranslationProfile[]>;
   private profiles: TranslationProfile[] = [];
 
   async initialize(): Promise<void> {
-    this.store = new JsonStore(join(app.getPath("userData"), "profiles.json"), { schemaVersion: 1, profiles: [] });
+    this.store = new JsonStore(join(app.getPath("userData"), "profiles.json"), { schemaVersion: 1, profiles: [] }, {
+      backup: true,
+      validate: isStoredProfiles
+    });
     const raw = await this.store.read() as ProfilesFile | TranslationProfile[];
     const legacy = Array.isArray(raw);
     this.profiles = (legacy ? raw : (raw.profiles ?? [])).map(normalizeProfile);

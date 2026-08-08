@@ -3,8 +3,9 @@ import { join } from "node:path";
 import type { DocumentTaskRecord } from "../../shared/types";
 import { JsonStore } from "./json-store";
 import { recoverDocumentTask } from "../document/task-state";
+import { isStoredDocuments } from "./schema";
 
-interface DocumentTasksFile {
+export interface DocumentTasksFile {
   schemaVersion: 1;
   tasks: DocumentTaskRecord[];
 }
@@ -18,11 +19,14 @@ function normalizeTask(task: DocumentTaskRecord): DocumentTaskRecord {
 }
 
 export class DocumentStore {
-  private store!: JsonStore<DocumentTasksFile>;
+  private store!: JsonStore<DocumentTasksFile | DocumentTaskRecord[]>;
   private tasks: DocumentTaskRecord[] = [];
 
   async initialize(): Promise<void> {
-    this.store = new JsonStore(join(app.getPath("userData"), "document-tasks.json"), { schemaVersion: 1, tasks: [] });
+    this.store = new JsonStore(join(app.getPath("userData"), "document-tasks.json"), { schemaVersion: 1, tasks: [] }, {
+      backup: true,
+      validate: isStoredDocuments
+    });
     const raw = await this.store.read() as DocumentTasksFile | DocumentTaskRecord[];
     const legacy = Array.isArray(raw);
     const stored = legacy ? raw : (raw.tasks ?? []);

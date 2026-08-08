@@ -18,10 +18,13 @@ pnpm dev
 electron/
   main/
     bootstrap/       应用装配
+    application/     SettingsService、TranslationEngine 等应用用例
     core/            无 Electron UI 依赖的核心逻辑
+    domain/          可替换的模型访问 ports
     dictionary/      ECDICT 只读查询
     document/        文档导入、分块与任务队列
     ipc/             IPC 注册与发送方校验
+    interfaces/ipc/  IPC 注册组合边界
     ocr/             Windows OCR
     provider/        Ollama / OpenAI-compatible
     selection/       全局划词监听、控制器与原生适配器
@@ -31,6 +34,7 @@ electron/
     window/          BrowserWindow 生命周期
   preload/           contextBridge 白名单
   shared/            主进程与渲染进程共享的契约和纯逻辑
+    contracts/       按领域导出的 IPC 契约入口
 src/
   components/        跨功能共享 UI
   features/
@@ -53,10 +57,10 @@ scripts/             构建、打包、图标和词典脚本
 
 - Electron 主进程负责系统能力和模型调用；Vue 渲染进程不得直接访问 Node.js。
 - 新系统能力必须同步修改：
-  1. `electron/shared/types.ts` 中的 `IPC_CHANNELS`
+  1. 对应 `electron/shared/contracts/*.ts` 中的 DTO/API 定义；通道名统一位于 `contracts/channels.ts`
   2. `electron/shared/api.ts` 中的 `TranslatorApi`
   3. `electron/preload/index.ts` 白名单
-  4. `electron/main/ipc/register.ts` handler
+  4. `electron/main/interfaces/ipc/register-*-ipc.ts` 对应领域 handler，并由 `register-all.ts` 组合；registrar 不得直接导入 Provider、Store、文件系统或 Electron 对话框
   5. `src/platform/translator.ts` 浏览器预览适配器
 - 所有会发送用户内容的模型调用必须经过 `resolveModelAccess()`，使用独立 `requestId`，可取消，并丢弃过期事件。
 - 交互翻译和后台文档任务统一经过 `ModelTaskScheduler`，交互任务优先。
@@ -66,8 +70,11 @@ scripts/             构建、打包、图标和词典脚本
 
 ```powershell
 pnpm test
+pnpm lint
+pnpm format:check
 pnpm build
 pnpm test:e2e
+pnpm check
 pnpm dist:win
 pnpm dist:win:portable
 ```
@@ -95,3 +102,4 @@ pnpm exec playwright test
 - 新本地文件是否进入隐私清除和诊断脱敏检查。
 - 删除模块后是否同步移除重复测试、过期文档和无效样式。
 - 提交前至少运行 `pnpm test` 与 `pnpm build`。
+- `pnpm lint` 执行主进程/渲染进程/领域边界检查，`pnpm format:check` 检查源码尾随空格；`pnpm check` 汇总类型、边界、格式、测试和构建。

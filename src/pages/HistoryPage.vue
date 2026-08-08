@@ -4,6 +4,7 @@ import PageHeader from "../components/PageHeader.vue";
 import AppIcon from "../components/AppIcon.vue";
 import type { TranslationHistory } from "../../electron/shared/types";
 import { getTranslatorApi } from "../platform/translator";
+import { useCopyFeedback } from "../features/useCopyFeedback";
 
 const items = ref<TranslationHistory[]>([]);
 const keyword = ref("");
@@ -11,7 +12,7 @@ const selectedItem = ref<TranslationHistory>();
 const translator = getTranslatorApi();
 const loading = ref(true);
 const showClearConfirm = ref(false);
-const copied = ref(false);
+const { copied, markCopied } = useCopyFeedback();
 const modeFilter = ref<"all" | TranslationHistory["mode"]>("all");
 const favoritesOnly = ref(false);
 const filteredItems = computed(() => {
@@ -45,8 +46,7 @@ async function clearAll(): Promise<void> {
 }
 async function copy(text: string): Promise<void> {
   await translator.clipboard.writeText(text);
-  copied.value = true;
-  setTimeout(() => (copied.value = false), 1200);
+  markCopied();
 }
 async function toggleFavorite(item: TranslationHistory): Promise<void> {
   const updated = await translator.history.toggleFavorite(item.id);
@@ -59,8 +59,7 @@ function bilingualText(item: TranslationHistory): string {
   return `原文：${item.sourceText}\n\n译文：${item.resultText}`;
 }
 function retranslate(item: TranslationHistory): void {
-  sessionStorage.setItem("lexiflow:retranslate", JSON.stringify(item));
-  translator.window.openMain("/");
+  void translator.translation.openHistorySession(item.id);
 }
 onMounted(load);
 const modeLabel = (mode: TranslationHistory["mode"]) =>

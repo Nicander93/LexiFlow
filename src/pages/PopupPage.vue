@@ -1,160 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { useTranslation } from "../features/translation/useTranslation";
-import { useDictionary } from "../features/dictionary/useDictionary";
-import type { NamingResult, TranslationMode, TranslationProfile } from "../../electron/shared/types";
-import { shouldLookupDictionary } from "../../electron/shared/dictionary-eligibility";
-import { getTranslatorApi } from "../platform/translator";
 import SegmentedText from "../features/translation/components/SegmentedText.vue";
 import DictionaryCompactCard from "../features/dictionary/components/DictionaryCompactCard.vue";
+import AppIcon from "../components/AppIcon.vue";
+import { usePopupWorkflow } from "../features/translation/usePopupWorkflow";
 
-type PopupView = "dictionary" | "normal" | "technical" | "naming";
-
-const mode = ref<TranslationMode>("technical");
-const popupView = ref<PopupView>("technical");
-const sourceText = ref("");
-const captureError = ref("");
-const capturing = ref(false);
-const pinned = ref(false);
-const profiles = ref<TranslationProfile[]>([]);
-const profileId = ref("technical");
-const defaultTranslationProfileId = ref("technical");
-const copied = ref(false);
-const sourceExpanded = ref(true);
-const popupShell = ref<HTMLElement>();
-const translator = getTranslatorApi();
-const { status, resultText, result, errorMessage, warningMessage, isRunning, start, stop, retry, reset } = useTranslation();
-const { status: dictionaryStatus, result: dictionaryResult, lookupImmediate, reset: resetDictionary } = useDictionary(0);
-const hoveredSegmentId = ref<string>();
-const lockedSegmentId = ref<string>();
-let payloadSequence = 0;
-
-function syncProfileForMode(nextMode: TranslationMode, preferredProfileId?: string): void {
-  if (nextMode === "naming") return;
-  if (preferredProfileId) {
-    profileId.value = preferredProfileId;
-    return;
-  }
-  profileId.value = nextMode === "technical"
-    ? (defaultTranslationProfileId.value || "technical")
-    : "general";
-}
-
-function adaptHeightForView(view: PopupView): void {
-  const kind = view === "dictionary" ? "dictionary" : view === "naming" ? "naming" : "translation";
-  void nextTick(() => translator.window.adaptPopupHeight(kind, popupShell.value?.scrollHeight));
-}
-
-const namingResult = computed<NamingResult | null>(() => {
-  if (mode.value !== "naming" || status.value !== "success") return null;
-  try { return JSON.parse(resultText.value) as NamingResult; } catch { return null; }
-});
-const displayResult = computed(() => namingResult.value?.recommended ?? resultText.value);
-const activeSegmentId = computed(() => lockedSegmentId.value ?? hoveredSegmentId.value);
-const hasStructuredResult = computed(() => status.value === "success" && Boolean(result.value?.segments.length));
-const showDictionaryTab = computed(() => dictionaryStatus.value === "found" && Boolean(dictionaryResult.value?.entry));
-
-async function run(): Promise<void> {
-  if (!sourceText.value.trim()) return;
-  hoveredSegmentId.value = undefined;
-  lockedSegmentId.value = undefined;
-  await start({
-    text: sourceText.value,
-    mode: mode.value,
-    targetLanguage: mode.value === "naming" ? "en" : "auto",
-    namingOptions: mode.value === "naming"
-      ? { type: "variable", style: "camelCase", language: "general" }
-      : undefined,
-    profileId: profileId.value
-  });
-}
-
-async function selectView(view: PopupView): Promise<void> {
-  popupView.value = view;
-  adaptHeightForView(view);
-  if (view === "dictionary") return;
-  mode.value = view;
-  syncProfileForMode(view);
-  await run();
-}
-
-async function triggerAiTranslate(): Promise<void> {
-  popupView.value = mode.value === "naming" ? "naming" : mode.value;
-  await run();
-}
-
-async function handlePayloadText(text: string, preferredMode: TranslationMode, sequence: number): Promise<void> {
-  sourceText.value = text;
-  if (!shouldLookupDictionary(text)) {
-    resetDictionary();
-    popupView.value = preferredMode;
-    mode.value = preferredMode;
-    await run();
-    return;
-  }
-
-  await lookupImmediate(text);
-  if (sequence !== payloadSequence) return;
-
-  if (dictionaryStatus.value === "found" && dictionaryResult.value?.entry) {
-    popupView.value = "dictionary";
-    return;
-  }
-
-  popupView.value = preferredMode;
-  mode.value = preferredMode;
-  await run();
-}
-
-async function copy(text = displayResult.value): Promise<void> {
-  if (!text) return;
-  await translator.clipboard.writeText(text);
-  copied.value = true;
-  setTimeout(() => (copied.value = false), 1000);
-}
-
-function close(): void { stop(); translator.window.closePopup(); }
-function togglePin(): void { pinned.value = !pinned.value; translator.window.pinPopup(pinned.value); }
-function openMain(): void { translator.window.openMain(mode.value === "naming" ? "/naming" : "/"); }
-function handleKeydown(event: KeyboardEvent): void { if (event.key === "Escape") close(); }
-
-watch([status, displayResult, sourceExpanded, popupView], () => adaptHeightForView(popupView.value));
-function handleSegmentHover(id: string | undefined): void { if (!lockedSegmentId.value) hoveredSegmentId.value = id; }
-function toggleSegment(id: string): void {
-  lockedSegmentId.value = lockedSegmentId.value === id ? undefined : id;
-  hoveredSegmentId.value = undefined;
-}
-function clearSegmentLock(): void { lockedSegmentId.value = undefined; hoveredSegmentId.value = undefined; }
-function navigateSegment(id: string): void { lockedSegmentId.value = id; hoveredSegmentId.value = undefined; }
-
-let removePayloadListener: (() => void) | undefined;
-onMounted(() => {
-  document.addEventListener("keydown", handleKeydown);
-  void translator.settings.get().then((settings) => {
-    defaultTranslationProfileId.value = settings.shortcuts.defaultTranslationProfileId || "technical";
-    profileId.value = defaultTranslationProfileId.value;
-  }).catch(() => undefined);
-  void translator.profiles.list().then((items) => { profiles.value = items; }).catch(() => undefined);
-  removePayloadListener = translator.window.onPopupPayload((payload) => {
-    const sequence = ++payloadSequence;
-    stop();
-    reset();
-    resetDictionary();
-    copied.value = false;
-    mode.value = payload.mode;
-    popupView.value = payload.mode;
-    syncProfileForMode(payload.mode, payload.profileId);
-    capturing.value = Boolean(payload.capturing);
-    captureError.value = payload.error ?? "";
-    hoveredSegmentId.value = undefined;
-    lockedSegmentId.value = undefined;
-    if (payload.text) {
-      capturing.value = false;
-      void handlePayloadText(payload.text, payload.mode, sequence);
-    }
-  });
-});
-onUnmounted(() => { document.removeEventListener("keydown", handleKeydown); removePayloadListener?.(); });
+const {
+  popupView, sourceText, captureError, capturing, pinned, profiles, profileId, copied, sourceExpanded, popupShell,
+  status, result, errorMessage, warningMessage, isRunning, retry, displayResult, namingResult, activeSegmentId, hasStructuredResult, showDictionaryTab, dictionaryResult,
+  run, selectView, triggerAiTranslate, copy, close, togglePin, openMain, handleSegmentHover, toggleSegment, clearSegmentLock, navigateSegment, stop
+} = usePopupWorkflow();
 </script>
 
 <template>
@@ -174,24 +28,11 @@ onUnmounted(() => { document.removeEventListener("keydown", handleKeydown); remo
     <template v-else>
       <section class="popup-source">
         <button class="source-toggle" @click="sourceExpanded = !sourceExpanded"><span>原文</span><span>{{ sourceExpanded ? '收起' : '展开' }}</span></button>
-        <SegmentedText
-          v-if="sourceExpanded && hasStructuredResult && result"
-          side="source"
-          :segments="result.segments"
-          :active-id="activeSegmentId"
-          @hover="handleSegmentHover"
-          @toggle="toggleSegment"
-          @clear="clearSegmentLock"
-          @navigate="navigateSegment"
-        />
+        <SegmentedText v-if="sourceExpanded && hasStructuredResult && result" side="source" :segments="result.segments" :active-id="activeSegmentId" @hover="handleSegmentHover" @toggle="toggleSegment" @clear="clearSegmentLock" @navigate="navigateSegment" />
         <pre v-else-if="sourceExpanded">{{ sourceText }}</pre>
       </section>
       <section class="popup-result">
-        <DictionaryCompactCard
-          v-if="popupView === 'dictionary' && dictionaryResult?.entry"
-          :entry="dictionaryResult.entry"
-          @ai-translate="triggerAiTranslate"
-        />
+        <DictionaryCompactCard v-if="popupView === 'dictionary' && dictionaryResult?.entry" :entry="dictionaryResult.entry" @ai-translate="triggerAiTranslate" />
         <div v-else-if="status === 'loading'" class="popup-state"><span class="spinner" />正在等待模型响应…</div>
         <div v-else-if="status === 'error'" class="popup-error">{{ errorMessage }}</div>
         <template v-else-if="namingResult">
@@ -200,15 +41,7 @@ onUnmounted(() => { document.removeEventListener("keydown", handleKeydown); remo
         </template>
         <template v-else-if="hasStructuredResult && result">
           <div v-if="warningMessage" class="popup-warning">{{ warningMessage }}</div>
-          <SegmentedText
-            side="target"
-            :segments="result.segments"
-            :active-id="activeSegmentId"
-            @hover="handleSegmentHover"
-            @toggle="toggleSegment"
-            @clear="clearSegmentLock"
-            @navigate="navigateSegment"
-          />
+          <SegmentedText side="target" :segments="result.segments" :active-id="activeSegmentId" @hover="handleSegmentHover" @toggle="toggleSegment" @clear="clearSegmentLock" @navigate="navigateSegment" />
         </template>
         <template v-else>
           <div v-if="warningMessage && displayResult" class="popup-warning">{{ warningMessage }}</div>
@@ -219,11 +52,11 @@ onUnmounted(() => { document.removeEventListener("keydown", handleKeydown); remo
     <footer class="popup-footer">
       <span class="popup-status">{{ copied ? '已复制' : status === 'success' ? '处理完成' : status === 'streaming' ? '生成中' : showDictionaryTab && popupView === 'dictionary' ? '本地词典' : '' }}</span>
       <div>
-        <button v-if="isRunning" @click="stop">停止</button>
-        <button v-if="status === 'error'" @click="retry">重试</button>
-        <button :disabled="!sourceText" title="复制原文" @click="copy(sourceText)">原文</button>
-        <button :disabled="!sourceText || !displayResult" title="复制原文和译文" @click="copy(`原文：${sourceText}\n\n译文：${displayResult}`)">双语</button>
-        <button :disabled="!displayResult" title="复制译文" @click="copy()">译文</button>
+        <button v-if="isRunning" class="icon-button" title="停止" aria-label="停止" @click="stop"><AppIcon name="stop" :size="16" /></button>
+        <button v-if="status === 'error'" class="icon-button" title="重试" aria-label="重试" @click="retry"><AppIcon name="refresh" :size="16" /></button>
+        <button class="icon-button" :disabled="!sourceText" title="复制原文" aria-label="复制原文" @click="copy(sourceText)"><AppIcon :name="copied ? 'check' : 'copy'" :size="16" /></button>
+        <button class="icon-button" :disabled="!sourceText || !displayResult" title="复制原文和译文" aria-label="复制原文和译文" @click="copy(`原文：${sourceText}\n\n译文：${displayResult}`)"><AppIcon name="bilingual" :size="16" /></button>
+        <button class="icon-button" :disabled="!displayResult" title="复制译文" aria-label="复制译文" @click="copy()"><AppIcon :name="copied ? 'check' : 'copy'" :size="16" /></button>
         <button @click="openMain">主窗口</button>
       </div>
     </footer>

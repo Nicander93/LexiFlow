@@ -4,7 +4,7 @@ import { bootstrapApplication } from "./bootstrap/application";
 
 if (process.env.LEXIFLOW_E2E === "1") {
   app.disableHardwareAcceleration();
-  app.setPath("userData", join(app.getPath("temp"), `lexiflow-e2e-${process.pid}`));
+  app.setPath("userData", process.env.LEXIFLOW_E2E_USER_DATA ?? join(app.getPath("temp"), `lexiflow-e2e-${process.pid}`));
 }
 
 if (process.env.LEXIFLOW_E2E !== "1" && !app.requestSingleInstanceLock()) {

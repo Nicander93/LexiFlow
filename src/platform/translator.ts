@@ -15,16 +15,23 @@ export function hasTranslatorApi(): boolean {
 }
 
 export function installBrowserPreviewApi(): void {
-  if (window.translator || navigator.userAgent.includes("Electron")) return;
+  if (window.translator) return;
+  // Packaged Electron expects preload; Cursor/IDE browsers also contain "Electron" in UA.
+  if (navigator.userAgent.includes("Electron") && !import.meta.env.DEV) {
+    const previewRequested = new URLSearchParams(window.location.search).has("preview");
+    if (!previewRequested) return;
+  }
 
   let settings = structuredClone(DEFAULT_SETTINGS);
+  let settingsRevision = 0;
   const listeners = new Set<(event: TranslationEvent) => void>();
   const revisionListeners = new Set<(event: SegmentRevisionEvent) => void>();
   const alternativesListeners = new Set<(event: SegmentAlternativeEvent) => void>();
   const dictionaryContextListeners = new Set<(event: DictionaryContextEvent) => void>();
+  const popupPayloadListeners = new Set<(payload: { text?: string; mode: "normal" | "technical" | "naming"; profileId?: string; capturing?: boolean; error?: string }) => void>();
   const history: TranslationHistory[] = [
     {
-      id: "preview-history",
+      id: "preview-history-1",
       sourceText: "Keep the implementation small and observable.",
       resultText: "让实现保持精简，并且便于观察运行状态。",
       mode: "technical",
@@ -32,8 +39,72 @@ export function installBrowserPreviewApi(): void {
       targetLanguage: "zh-CN",
       provider: "ollama",
       model: "qwen3.5:9b",
-      createdAt: new Date().toISOString()
-      ,isFavorite: false
+      createdAt: new Date().toISOString(),
+      isFavorite: true
+    },
+    {
+      id: "preview-history-2",
+      sourceText: "The renderer must not call Node.js APIs directly.",
+      resultText: "渲染进程不得直接调用 Node.js API。",
+      mode: "normal",
+      sourceLanguage: "en",
+      targetLanguage: "zh-CN",
+      provider: "ollama",
+      model: "qwen3.5:9b",
+      createdAt: new Date(Date.now() - 3600_000).toISOString(),
+      isFavorite: false
+    },
+    {
+      id: "preview-history-3",
+      sourceText: "是否已经完成水文数据同步",
+      resultText: JSON.stringify({
+        recommended: "isHydrologyDataSynced",
+        candidates: [
+          { name: "isHydrologyDataSynced", meaning: "水文数据是否已同步" },
+          { name: "hasHydrologySyncCompleted", meaning: "水文同步是否已完成" }
+        ]
+      }, null, 2),
+      mode: "naming",
+      sourceLanguage: "zh-CN",
+      targetLanguage: "en",
+      provider: "ollama",
+      model: "qwen3.5:9b",
+      createdAt: new Date(Date.now() - 7200_000).toISOString(),
+      isFavorite: false
+    }
+  ];
+  const documents: DocumentTaskRecord[] = [
+    {
+      id: "preview-doc-1",
+      fileName: "architecture-notes.md",
+      format: "markdown",
+      totalChunks: 12,
+      completedChunks: 12,
+      status: "completed",
+      profileId: "technical",
+      model: "qwen3.5:9b",
+      promptVersion: "preview",
+      createdAt: Date.now() - 86_400_000,
+      updatedAt: Date.now() - 86_000_000,
+      sourcePath: "preview://architecture-notes.md",
+      chunks: [],
+      translations: {}
+    },
+    {
+      id: "preview-doc-2",
+      fileName: "release-checklist.txt",
+      format: "txt",
+      totalChunks: 8,
+      completedChunks: 3,
+      status: "translating",
+      profileId: "general",
+      model: "qwen3.5:9b",
+      promptVersion: "preview",
+      createdAt: Date.now() - 3_600_000,
+      updatedAt: Date.now() - 60_000,
+      sourcePath: "preview://release-checklist.txt",
+      chunks: [],
+      translations: {}
     }
   ];
 
@@ -45,10 +116,21 @@ export function installBrowserPreviewApi(): void {
     },
     settings: {
       get: async () => structuredClone(settings),
-      update: async (next) => {
-        settings = structuredClone(next);
+      getSnapshot: async () => ({ revision: settingsRevision, settings: structuredClone(settings) }),
+      patch: async (patch) => {
+        if (patch.type === "reset") settings = structuredClone(DEFAULT_SETTINGS);
+        else if (patch.type === "update-provider") settings.provider = { ...settings.provider, ...patch.value };
+        else if (patch.type === "update-shortcuts") settings.shortcuts = { ...settings.shortcuts, ...patch.value };
+        else if (patch.type === "update-window") settings.window = { ...settings.window, ...patch.value };
+        else {
+          if (patch.value.translation) settings.translation = { ...settings.translation, ...patch.value.translation };
+          if (patch.value.history) settings.history = { ...settings.history, ...patch.value.history };
+          if (patch.value.routing) settings.routing = { ...settings.routing, ...patch.value.routing };
+          if (patch.value.startup) settings.startup = { ...settings.startup, ...patch.value.startup };
+        }
+        settingsRevision += 1;
         return {
-          settings: structuredClone(settings),
+          snapshot: { revision: settingsRevision, settings: structuredClone(settings) },
           shortcutResult: { translation: true, naming: true, screenshot: true, errors: [] }
         };
       }
@@ -59,19 +141,21 @@ export function installBrowserPreviewApi(): void {
     },
     translation: {
       getSession: async () => undefined,
+      openHistorySession: async () => false,
       start: async (request) => {
         const requestId = crypto.randomUUID();
         queueMicrotask(() => listeners.forEach((listener) => listener({ requestId, status: "loading" })));
         setTimeout(() => {
           const content = request.mode === "naming"
             ? JSON.stringify({
-                recommended: "isContentReady",
+                recommended: "isHydrologyDataSynced",
                 candidates: [
-                  { name: "isContentReady", meaning: "内容是否已准备完成" },
-                  { name: "hasContentLoaded", meaning: "内容是否已经加载" }
+                  { name: "isHydrologyDataSynced", meaning: "水文数据是否已同步" },
+                  { name: "hasHydrologySyncCompleted", meaning: "水文同步是否已完成" },
+                  { name: "isWaterDataSyncDone", meaning: "水文数据同步是否完成" }
                 ]
               })
-            : "这是一段用于界面预览的流式结果。真实翻译只会在 Electron 中调用所选模型。";
+            : "让实现保持精简，并且便于观察运行状态。";
           listeners.forEach((listener) => listener({ requestId, status: "success", content }));
         }, 450);
         return requestId;
@@ -178,8 +262,11 @@ export function installBrowserPreviewApi(): void {
       delete: async () => undefined
     },
     documents: {
-      list: async (): Promise<DocumentTaskRecord[]> => [],
-      delete: async () => undefined,
+      list: async (): Promise<DocumentTaskRecord[]> => structuredClone(documents),
+      delete: async (id) => {
+        const index = documents.findIndex((item) => item.id === id);
+        if (index >= 0) documents.splice(index, 1);
+      },
       import: async () => undefined,
       export: async () => false,
       start: async () => undefined,
@@ -189,7 +276,13 @@ export function installBrowserPreviewApi(): void {
     },
     privacy: { clearLocalData: async () => { history.splice(0); } },
     diagnostics: { exportReport: async () => ({ saved: false }) },
-    ocr: { listScreens: async () => [], captureScreen: async () => { throw new Error("浏览器预览不支持 Windows OCR。"); }, onCaptureRequested: () => () => undefined },
+    ocr: {
+      listScreens: async () => [],
+      captureScreen: async () => { throw new Error("浏览器预览不支持 Windows OCR。"); },
+      recognizeRegion: async () => { throw new Error("浏览器预览不支持 Windows OCR。"); },
+      cancel: () => undefined,
+      onCaptureRequested: () => () => undefined
+    },
     clipboard: {
       writeText: async (text) => navigator.clipboard?.writeText(text)
     },
@@ -198,8 +291,15 @@ export function installBrowserPreviewApi(): void {
       closePopup: () => undefined,
       pinPopup: () => undefined,
       adaptPopupHeight: () => undefined,
-      onPopupPayload: () => () => undefined,
+      onPopupPayload: (listener) => {
+        popupPayloadListeners.add(listener);
+        return () => popupPayloadListeners.delete(listener);
+      },
       onNavigate: () => () => undefined
     }
+  };
+
+  (window as Window & { __lexiflowPreviewEmitPopup?: (payload: { text?: string; mode: "normal" | "technical" | "naming"; profileId?: string; capturing?: boolean; error?: string }) => void }).__lexiflowPreviewEmitPopup = (payload) => {
+    popupPayloadListeners.forEach((listener) => listener(payload));
   };
 }

@@ -6,6 +6,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import {
   IPC_CHANNELS,
   type AppSettings,
+  type CaptureScreenResult,
   type DictionaryLookupRequest,
   type DictionaryLookupResult,
   type DictionaryStatus,
@@ -13,6 +14,7 @@ import {
   type DocumentTaskEvent,
   type OcrResult,
   type OcrScreen,
+  type RecognizeRegionRequest,
   type DocumentImportRequest,
   type DocumentExportRequest,
   type GlossaryConflict,
@@ -32,7 +34,9 @@ import {
   type TranslationHistory,
   type HistoryRevisionUpdate,
   type TranslationSession,
-  type TranslationRequest
+  type TranslationRequest,
+  type SettingsPatch,
+  type SettingsSnapshot
   ,type TranslationProfile
 } from "../shared/types";
 import type { TranslatorApi } from "../shared/api";
@@ -49,10 +53,11 @@ const api = {
   },
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
-    update: (settings: AppSettings): Promise<{
-      settings: AppSettings;
+    getSnapshot: (): Promise<SettingsSnapshot> => ipcRenderer.invoke(IPC_CHANNELS.settingsGetSnapshot),
+    patch: (patch: SettingsPatch): Promise<{
+      snapshot: SettingsSnapshot;
       shortcutResult: ShortcutRegistrationResult;
-    }> => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, settings)
+    }> => ipcRenderer.invoke(IPC_CHANNELS.settingsPatch, patch)
   },
   provider: {
     healthCheck: (): Promise<ProviderHealth> => ipcRenderer.invoke(IPC_CHANNELS.providerHealth),
@@ -60,6 +65,7 @@ const api = {
   },
   translation: {
     getSession: (): Promise<TranslationSession | undefined> => ipcRenderer.invoke(IPC_CHANNELS.translationSessionGet),
+    openHistorySession: (historyId: string): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.translationOpenHistory, historyId),
     start: (request: TranslationRequest): Promise<string> =>
       ipcRenderer.invoke(IPC_CHANNELS.translationStart, request),
     cancel: (requestId?: string): void => ipcRenderer.send(IPC_CHANNELS.translationCancel, requestId),
@@ -129,7 +135,9 @@ const api = {
   },
   ocr: {
     listScreens: (): Promise<OcrScreen[]> => ipcRenderer.invoke(IPC_CHANNELS.ocrListScreens),
-    captureScreen: (screenId?: string): Promise<OcrResult> => ipcRenderer.invoke(IPC_CHANNELS.ocrCapture, screenId),
+    captureScreen: (screenId?: string): Promise<CaptureScreenResult> => ipcRenderer.invoke(IPC_CHANNELS.ocrCaptureScreen, screenId),
+    recognizeRegion: (request: RecognizeRegionRequest): Promise<OcrResult> => ipcRenderer.invoke(IPC_CHANNELS.ocrRecognizeRegion, request),
+    cancel: (captureId: string): void => ipcRenderer.send(IPC_CHANNELS.ocrCancel, captureId),
     onCaptureRequested: (listener: () => void): (() => void) => on(IPC_CHANNELS.ocrCaptureRequested, listener)
   },
   clipboard: {
@@ -143,7 +151,7 @@ const api = {
       ipcRenderer.send(IPC_CHANNELS.popupAdaptHeight, kind, contentHeight),
     onPopupPayload: (listener: (payload: PopupPayload) => void): (() => void) =>
       on(IPC_CHANNELS.popupPayload, listener),
-    onNavigate: (listener: (route: string) => void): (() => void) => on("navigation:open", listener)
+    onNavigate: (listener: (route: string) => void): (() => void) => on(IPC_CHANNELS.navigationOpen, listener)
   }
 } satisfies TranslatorApi;
 

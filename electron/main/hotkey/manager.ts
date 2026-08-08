@@ -5,11 +5,23 @@ export type HotkeyAction = "translate" | "naming" | "ocr";
 
 export class HotkeyManager {
   private lastTriggeredAt = 0;
+  private lastSettings?: ShortcutSettings;
 
   constructor(private readonly onTrigger: (action: HotkeyAction) => void) {}
 
   register(settings: ShortcutSettings): ShortcutRegistrationResult {
     globalShortcut.unregisterAll();
+    const result = this.registerCurrent(settings);
+    if (result.errors.length) {
+      globalShortcut.unregisterAll();
+      if (this.lastSettings) this.registerCurrent(this.lastSettings);
+      return result;
+    }
+    this.lastSettings = structuredClone(settings);
+    return result;
+  }
+
+  private registerCurrent(settings: ShortcutSettings): ShortcutRegistrationResult {
     if (settings.paused) return { translation: true, naming: true, screenshot: true, errors: [] };
     const trigger = (action: HotkeyAction) => {
       const now = Date.now();
@@ -31,5 +43,6 @@ export class HotkeyManager {
 
   unregister(): void {
     globalShortcut.unregisterAll();
+    this.lastSettings = undefined;
   }
 }

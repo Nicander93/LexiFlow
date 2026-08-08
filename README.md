@@ -2,6 +2,32 @@
 
 LexiFlow 是面向 Windows 的本地优先桌面翻译工具，支持划词提示、技术翻译、编程命名、本地词典、OCR、文档翻译、流式输出和本地历史。
 
+## 界面预览
+
+主窗口翻译：
+
+![翻译](docs/screenshots/translation.png)
+
+编程命名：
+
+![命名](docs/screenshots/naming.png)
+
+本地历史：
+
+![历史](docs/screenshots/history.png)
+
+文档翻译任务：
+
+![文档](docs/screenshots/documents.png)
+
+划词 / 快捷键弹窗：
+
+![弹窗](docs/screenshots/popup.png)
+
+设置（Ollama / 快捷键）：
+
+![设置](docs/screenshots/settings.png)
+
 ## 主要能力
 
 - 系统托盘常驻与可配置全局快捷键

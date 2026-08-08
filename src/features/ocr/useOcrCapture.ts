@@ -21,10 +21,17 @@ export function useOcrCapture(options: {
     ocrLoading.value = true;
     ocrError.value = "";
     try {
+      if (ocrResult.value?.captureId) translator.ocr.cancel(ocrResult.value.captureId);
       const captured = await translator.ocr.captureScreen(ocrScreenId.value);
-      ocrResult.value = captured;
-      ocrEditedText.value = captured.text;
-      options.sourceText.value = captured.text;
+      ocrResult.value = {
+        captureId: captured.captureId,
+        text: "",
+        blocks: [],
+        imageDataUrl: captured.imageDataUrl,
+        imageWidth: captured.pixelWidth,
+        imageHeight: captured.pixelHeight
+      };
+      ocrEditedText.value = "";
     } catch (error) {
       ocrError.value = error instanceof Error ? error.message : "OCR 识别失败。";
     } finally {
@@ -87,16 +94,45 @@ export function useOcrCapture(options: {
       ocrSelection.value = undefined;
       return;
     }
-    const left = Math.min(selection.startX, selection.endX) * ocrResult.value.imageWidth;
-    const right = Math.max(selection.startX, selection.endX) * ocrResult.value.imageWidth;
-    const top = Math.min(selection.startY, selection.endY) * ocrResult.value.imageHeight;
-    const bottom = Math.max(selection.startY, selection.endY) * ocrResult.value.imageHeight;
-    const text = ocrResult.value.blocks.filter((block) => {
-      const centerX = block.boundingBox.x + block.boundingBox.width / 2;
-      const centerY = block.boundingBox.y + block.boundingBox.height / 2;
-      return centerX >= left && centerX <= right && centerY >= top && centerY <= bottom;
-    }).map((block) => block.text).join("\n");
-    if (text) useOcrBlock(text);
+    void recognizeSelection(selection);
+  }
+
+  function cancelOcrSelection(): void {
+    selectingOcr.value = false;
+    ocrSelection.value = undefined;
+  }
+
+  async function recognizeSelection(selection: { startX: number; startY: number; endX: number; endY: number }): Promise<void> {
+    const captureId = ocrResult.value?.captureId;
+    if (!captureId) return;
+    ocrLoading.value = true;
+    ocrError.value = "";
+    try {
+      const recognized = await translator.ocr.recognizeRegion({
+        captureId,
+        region: {
+          x: Math.min(selection.startX, selection.endX),
+          y: Math.min(selection.startY, selection.endY),
+          width: Math.abs(selection.endX - selection.startX),
+          height: Math.abs(selection.endY - selection.startY)
+        }
+      });
+      ocrResult.value = recognized;
+      ocrEditedText.value = recognized.text;
+      if (recognized.text) options.sourceText.value = recognized.text;
+    } catch (error) {
+      ocrError.value = error instanceof Error ? error.message : "OCR 识别失败。";
+    } finally {
+      ocrLoading.value = false;
+    }
+  }
+
+  function resetOcr(): void {
+    if (ocrResult.value?.captureId) translator.ocr.cancel(ocrResult.value.captureId);
+    ocrResult.value = undefined;
+    ocrSelection.value = undefined;
+    ocrEditedText.value = "";
+    ocrError.value = "";
   }
 
   const ocrSelectionStyle = computed(() => {
@@ -124,7 +160,10 @@ export function useOcrCapture(options: {
       void captureOcr();
     });
   });
-  onUnmounted(() => removeCaptureListener?.());
+  onUnmounted(() => {
+    removeCaptureListener?.();
+    if (ocrResult.value?.captureId) translator.ocr.cancel(ocrResult.value.captureId);
+  });
 
   return {
     ocrResult,
@@ -143,6 +182,9 @@ export function useOcrCapture(options: {
     copyOcrText,
     beginOcrSelection,
     moveOcrSelection,
-    endOcrSelection
+    endOcrSelection,
+    cancelOcrSelection,
+    setOcrImage: (element?: HTMLElement) => { ocrImage.value = element; },
+    resetOcr
   };
 }

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -29,5 +29,33 @@ describe("JsonStore 串行写入", () => {
     expect(Array.isArray(parsed.items)).toBe(true);
     expect(parsed.items.length).toBeGreaterThan(0);
     expect(parsed.items).toEqual(Array.from({ length: parsed.items.length }, (_, i) => i));
+  });
+
+  it("隔离损坏 JSON，而不是静默覆盖原文件", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "lexiflow-json-corrupt-"));
+    dirs.push(dir);
+    const filePath = join(dir, "history.json");
+    await writeFile(filePath, "{broken", "utf8");
+    const store = new JsonStore(filePath, { items: [] }, { backup: true });
+    expect(await store.read()).toEqual({ items: [] });
+    const files = await readdir(dir);
+    expect(files.some((file) => file.startsWith("history.json.corrupt."))).toBe(true);
+  });
+
+  it("schema validation isolates valid JSON with an invalid shape", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "lexiflow-json-schema-"));
+    dirs.push(dir);
+    const filePath = join(dir, "settings.json");
+    await writeFile(filePath, JSON.stringify({ provider: "not-an-object" }), "utf8");
+    const store = new JsonStore(filePath, { provider: {} }, {
+      backup: true,
+      validate: (value): value is { provider: Record<string, unknown> } =>
+        Boolean(value) && typeof value === "object" && !Array.isArray(value)
+          && typeof (value as { provider?: unknown }).provider === "object"
+    });
+
+    expect(await store.read()).toEqual({ provider: {} });
+    const files = await readdir(dir);
+    expect(files.some((file) => file.startsWith("settings.json.corrupt."))).toBe(true);
   });
 });

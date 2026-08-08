@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { IPC_CHANNELS, type PopupPayload } from "../../shared/types";
 import { configureNavigationSecurity } from "../ipc/security";
+import { PopupBoundsPersistence } from "./popup-bounds-persistence";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 
@@ -13,7 +14,7 @@ export class WindowManager {
   private selectionTipTimer?: ReturnType<typeof setTimeout>;
   private popupPinned = false;
   private isQuitting = false;
-  private rememberingBounds = false;
+  private popupBoundsPersistence?: PopupBoundsPersistence;
 
   constructor(
     private readonly getCloseAction: () => "hide" | "quit",
@@ -85,12 +86,13 @@ export class WindowManager {
     return window;
   }
 
-  async showMainWindow(route = "/"): Promise<void> {
+  async showMainWindow(route?: string): Promise<BrowserWindow> {
     const window = await this.createMainWindow();
-    if (route !== "/") window.webContents.send("navigation:open", route);
+    if (route !== undefined) window.webContents.send(IPC_CHANNELS.navigationOpen, route);
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
+    return window;
   }
 
   async requestOcrCapture(): Promise<void> {
@@ -124,18 +126,23 @@ export class WindowManager {
       title: "LexiFlow 快速翻译"
     });
     this.popupWindow = window;
+    this.popupBoundsPersistence = new PopupBoundsPersistence((bounds) => this.savePopupBounds(bounds));
     window.on("blur", () => {
       if (!this.popupPinned && this.shouldAutoHidePopup()) window.hide();
     });
     const remember = (): void => {
-      if (this.rememberingBounds || !this.popupWindow || this.popupWindow.isDestroyed()) return;
-      this.rememberingBounds = true;
-      const [nextWidth, nextHeight] = this.popupWindow.getSize();
-      this.savePopupBounds({ width: nextWidth, height: nextHeight });
-      this.rememberingBounds = false;
+      if (!this.popupWindow || this.popupWindow.isDestroyed()) return;
+      this.popupBoundsPersistence?.resized(() => {
+        const [width, height] = this.popupWindow?.getSize() ?? [0, 0];
+        return { width, height };
+      });
     };
-    window.on("resized", remember);
+    window.on("resized", () => {
+      remember();
+    });
     window.on("closed", () => {
+      this.popupBoundsPersistence?.dispose();
+      this.popupBoundsPersistence = undefined;
       this.popupWindow = null;
     });
     await this.loadRenderer(window, "/popup");
@@ -151,6 +158,9 @@ export class WindowManager {
     const [width] = this.popupWindow.getSize();
     const fallbackHeight = kind === "dictionary" ? 250 : kind === "naming" ? 300 : kind === "translation" ? 340 : 280;
     const height = Math.min(maxHeight, Math.max(220, Math.round(contentHeight ?? fallbackHeight)));
+    const [, currentHeight] = this.popupWindow.getSize();
+    if (currentHeight === height) return;
+    this.popupBoundsPersistence?.beginProgrammaticResize();
     this.popupWindow.setMaximumSize(1200, maxHeight);
     this.popupWindow.setSize(width, height, false);
   }

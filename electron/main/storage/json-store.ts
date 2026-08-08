@@ -1,20 +1,36 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+
+export interface JsonStoreOptions<T> {
+  backup?: boolean;
+  validate?: (value: unknown) => value is T;
+  onCorrupt?: (corruptPath: string) => void;
+}
 
 export class JsonStore<T> {
   private writeChain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly filePath: string,
-    private readonly fallback: T
+    private readonly fallback: T,
+    private readonly options: JsonStoreOptions<T> = {}
   ) {}
 
   async read(): Promise<T> {
     try {
-      return JSON.parse(await readFile(this.filePath, "utf8")) as T;
-    } catch {
-      return structuredClone(this.fallback);
+      const parsed: unknown = JSON.parse(await readFile(this.filePath, "utf8"));
+      if (this.options.validate && !this.options.validate(parsed)) throw new SyntaxError("Stored JSON failed schema validation.");
+      return parsed as T;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return structuredClone(this.fallback);
+      if (error instanceof SyntaxError || (error as NodeJS.ErrnoException).code === "ERR_INVALID_ARG_TYPE") {
+        const corruptPath = `${this.filePath}.corrupt.${Date.now()}.json`;
+        await rename(this.filePath, corruptPath).catch(() => undefined);
+        this.options.onCorrupt?.(corruptPath);
+        return structuredClone(this.fallback);
+      }
+      throw error;
     }
   }
 
@@ -30,8 +46,18 @@ export class JsonStore<T> {
 
   private async writeInternal(value: T): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
+    if (this.options.backup) {
+      await copyFile(this.filePath, `${this.filePath}.bak`).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
     const temporaryPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(temporaryPath, JSON.stringify(value, null, 2), "utf8");
-    await rename(temporaryPath, this.filePath);
+    try {
+      await writeFile(temporaryPath, JSON.stringify(value, null, 2), "utf8");
+      await rename(temporaryPath, this.filePath);
+    } catch (error) {
+      await rename(temporaryPath, `${temporaryPath}.failed`).catch(() => undefined);
+      throw error;
+    }
   }
 }

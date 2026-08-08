@@ -11,13 +11,17 @@ import {
   searchHistory,
   type StoredHistory
 } from "./history-policy";
+import { isStoredHistory } from "./schema";
 
 export class HistoryStore {
-  private store!: JsonStore<StoredHistory>;
+  private store!: JsonStore<StoredHistory | TranslationHistory[]>;
   private items: TranslationHistory[] = [];
 
   async initialize(): Promise<void> {
-    this.store = new JsonStore(join(app.getPath("userData"), "history.json"), { schemaVersion: HISTORY_SCHEMA_VERSION, items: [] });
+    this.store = new JsonStore(join(app.getPath("userData"), "history.json"), { schemaVersion: HISTORY_SCHEMA_VERSION, items: [] }, {
+      backup: true,
+      validate: isStoredHistory
+    });
     const migration = migrateHistory(await this.store.read());
     this.items = migration.data.items;
     if (migration.migrated) {

@@ -77,7 +77,11 @@ function createHarness() {
   };
   const settings = { get: () => structuredClone(DEFAULT_SETTINGS) };
   const glossary = { matches: () => undefined };
-  const manager = new DocumentManager(store as never, profiles as never, settings as never, glossary as never);
+  const gateway = {
+    translate: async function* () { yield { content: '{"segments":[{"id":"c1","target":"译文"}]}' }; },
+    chat: async function* () { yield { content: "" }; }
+  };
+  const manager = new DocumentManager(store as never, profiles as never, settings as never, glossary as never, undefined, () => gateway as never);
   const sender = { isDestroyed: () => false, send: vi.fn() } as unknown as Electron.WebContents;
   return { manager, store, tasks, sender };
 }

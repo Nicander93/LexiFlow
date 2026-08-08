@@ -3,11 +3,12 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import PageHeader from "../components/PageHeader.vue";
 import SettingsSection from "../features/settings/SettingsSection.vue";
 import { DEFAULT_PROMPTS } from "../../electron/shared/defaults";
-import type { AppSettings, GlossaryConflict, GlossaryEntry, ProviderModel, TranslationProfile } from "../../electron/shared/types";
+import type { AppSettings, GlossaryConflict, GlossaryEntry, ProviderModel, SettingsPatch, TranslationProfile } from "../../electron/shared/types";
 import { getTranslatorApi } from "../platform/translator";
 import { toIpcPayload } from "../../electron/shared/serialization";
 
 const settings = ref<AppSettings>();
+const lastSavedSettings = ref<AppSettings>();
 const models = ref<ProviderModel[]>([]);
 const message = ref("");
 const messageType = ref<"success" | "error">("success");
@@ -78,11 +79,27 @@ async function save(): Promise<boolean> {
   if (requiresRemoteConfirmation) settings.value.provider.remoteUsageConfirmed = true;
   if (settings.value.provider.type === "ollama") settings.value.provider.remoteUsageConfirmed = false;
   try {
-    const result = await translator.settings.update(buildSettingsPayload());
-    settings.value = result.settings;
-    syncApiKeyState(result.settings);
+    const next = buildSettingsPayload();
+    const previous = lastSavedSettings.value ?? settings.value;
+    const patches: SettingsPatch[] = [];
+    if (JSON.stringify(previous?.provider) !== JSON.stringify(next.provider)) patches.push({ type: "update-provider", value: next.provider });
+    if (JSON.stringify(previous?.shortcuts) !== JSON.stringify(next.shortcuts)) patches.push({ type: "update-shortcuts", value: next.shortcuts });
+    if (JSON.stringify(previous?.translation) !== JSON.stringify(next.translation) || JSON.stringify(previous?.history) !== JSON.stringify(next.history) || JSON.stringify(previous?.routing) !== JSON.stringify(next.routing) || JSON.stringify(previous?.startup) !== JSON.stringify(next.startup)) {
+      patches.push({ type: "update-general", value: { translation: next.translation, history: next.history, routing: next.routing, startup: next.startup } });
+    }
+    if (JSON.stringify(previous?.window) !== JSON.stringify(next.window)) patches.push({ type: "update-window", value: next.window });
+    let saved = previous ?? next;
+    let shortcutResult = { translation: true, naming: true, screenshot: true, errors: [] as string[] };
+    for (const patch of patches) {
+      const result = await translator.settings.patch(patch);
+      saved = result.snapshot.settings;
+      shortcutResult = result.shortcutResult;
+    }
+    settings.value = saved;
+    lastSavedSettings.value = structuredClone(saved);
+    syncApiKeyState(saved);
     await nextTick();
-    if (result.shortcutResult.errors.length) notify(result.shortcutResult.errors.join("\n"), "error");
+    if (shortcutResult.errors.length) notify(shortcutResult.errors.join("\n"), "error");
     else notify("设置已保存。");
     return true;
   } catch (error) {
@@ -178,6 +195,7 @@ async function clearLocalData(): Promise<void> {
   try {
     await translator.privacy.clearLocalData();
     settings.value = await translator.settings.get();
+    lastSavedSettings.value = structuredClone(settings.value);
     syncApiKeyState(settings.value);
     glossary.value = [];
     glossaryConflicts.value = [];
@@ -199,6 +217,7 @@ onMounted(async () => {
     const loaded = await translator.settings.get();
     loaded.provider.enableReasoning = loaded.provider.enableReasoning === true;
     settings.value = loaded;
+    lastSavedSettings.value = structuredClone(loaded);
     syncApiKeyState(settings.value);
     const [loadedProfiles] = await Promise.all([translator.profiles.list(), reloadGlossary()]);
     profiles.value = loadedProfiles;

@@ -6,12 +6,14 @@
 
 | 文档 | 用途 |
 | --- | --- |
+| [产品上下文](product-context.md) | 产品目标、当前范围、非目标和长期原则 |
 | [用户指南](user-guide.md) | 安装后的配置、划词、翻译、OCR、文档与隐私操作 |
 | [架构说明](architecture.md) | 进程拓扑、模块职责、关键数据流和安全约束 |
 | [开发指南](development.md) | 环境、目录结构、常用命令和修改检查清单 |
 | [代码审查指南](review-guide.md) | 按风险阅读代码与验证关键不变量 |
 | [故障排查](troubleshooting.md) | 快捷键、划词、Provider、词典和打包问题 |
 | [发布检查清单](release-checklist.md) | 自动门禁、Windows 手工回归、隐私和安装包验收 |
+| [执行计划](exec-plans/index.md) | 跨模块或分阶段工作的活动计划、完成记录与模板 |
 
 ## 历史资料
 

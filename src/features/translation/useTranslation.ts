@@ -2,11 +2,12 @@ import { computed, onUnmounted, ref } from "vue";
 import type {
   TranslationResult,
   TranslationRequest,
-  TranslationStatus
+  TranslationStatus,
+  TranslationState
 } from "../../../electron/shared/types";
+import { reduceTranslationState } from "../../../electron/shared/translation-state";
 import { getTranslatorApi } from "../../platform/translator";
 import { toIpcPayload } from "../../../electron/shared/serialization";
-import { assembleDisplayText } from "../../../electron/shared/text-assembly";
 
 export function useTranslation() {
   const translator = getTranslatorApi();
@@ -18,40 +19,17 @@ export function useTranslation() {
   const historyId = ref<string>();
   const currentRequestId = ref<string>();
   let lastRequest: TranslationRequest | undefined;
+  let reducerState: TranslationState = { status: "idle", content: "" };
 
   const removeListener = translator.translation.onEvent((event) => {
-    if (currentRequestId.value && event.requestId !== currentRequestId.value) return;
-    if (!currentRequestId.value) currentRequestId.value = event.requestId;
-    if (event.status !== "success" || status.value !== "success" || !event.warning) {
-      status.value = event.status;
-    }
-    if (event.status === "streaming" && event.content) resultText.value += event.content;
-    if (event.status === "streaming" && event.segment) {
-      const current = result.value;
-      const segments = [...(current?.segments ?? [])];
-      const index = segments.findIndex((item) => item.id === event.segment!.id);
-      if (index >= 0) segments[index] = event.segment;
-      else segments.push(event.segment);
-      const targetText = assembleDisplayText(segments, current?.targetLanguage ?? lastRequest?.targetLanguage ?? "auto");
-      result.value = {
-        requestId: event.requestId,
-        sourceText: current?.sourceText ?? lastRequest?.text ?? "",
-        originalSourceText: current?.originalSourceText,
-        targetText,
-        sourceLanguage: current?.sourceLanguage ?? "",
-        targetLanguage: current?.targetLanguage ?? lastRequest?.targetLanguage ?? "auto",
-        segments,
-        modelInfo: current?.modelInfo ?? { provider: "ollama", model: "", durationMs: 0 },
-        cleanupActions: current?.cleanupActions,
-        createdAt: current?.createdAt ?? Date.now()
-      };
-      resultText.value = targetText;
-    }
-    if (event.status === "success" && event.content) resultText.value = event.content;
-    if (event.status === "success" && event.result) result.value = event.result;
-    if (event.historyId) historyId.value = event.historyId;
-    if (event.warning) warningMessage.value = event.warning;
-    if (event.error) errorMessage.value = event.error;
+    reducerState = reduceTranslationState(reducerState, event);
+    currentRequestId.value = reducerState.requestId;
+    status.value = reducerState.status;
+    resultText.value = reducerState.content;
+    result.value = reducerState.result;
+    historyId.value = reducerState.historyId;
+    if (reducerState.warning) warningMessage.value = reducerState.warning;
+    if (reducerState.error) errorMessage.value = reducerState.error;
   });
 
   async function start(request: TranslationRequest): Promise<void> {
@@ -64,13 +42,14 @@ export function useTranslation() {
     errorMessage.value = "";
     warningMessage.value = "";
     historyId.value = undefined;
+    reducerState = { status: "loading", content: "" };
     status.value = "loading";
     try {
       const requestId = await translator.translation.start(payload);
       currentRequestId.value ??= requestId;
-    } catch {
+    } catch (error) {
       status.value = "error";
-      errorMessage.value = "无法启动翻译请求，请重启应用后重试。";
+      errorMessage.value = error instanceof Error ? error.message : "无法启动翻译请求，请重启应用后重试。";
     }
   }
 
@@ -87,6 +66,7 @@ export function useTranslation() {
     errorMessage.value = "";
     warningMessage.value = "";
     historyId.value = undefined;
+    reducerState = { status: "idle", content: "" };
     status.value = "idle";
     lastRequest = undefined;
   }
