@@ -20,7 +20,8 @@
 .local-status i { width: 7px; height: 7px; border-radius: 50%; background: #3db783; }
 .main-content { min-width: 0; min-height: 100vh; }
 .page { max-width: 1340px; margin: 0 auto; padding: 12px 16px 16px; }
-.settings-page { max-width: 1040px; }
+.settings-page { max-width: 1040px; height: 100%; overflow: auto; scrollbar-width: none; }
+.settings-page::-webkit-scrollbar { width: 0; height: 0; }
 @media (max-width: 920px) {
   .app-shell { grid-template-columns: 64px minmax(0, 1fr); }
   .sidebar { padding-inline: 7px; }

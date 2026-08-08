@@ -24,6 +24,7 @@ export function installBrowserPreviewApi(): void {
 
   let settings = structuredClone(DEFAULT_SETTINGS);
   let settingsRevision = 0;
+  const previewUuid = (): string => globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const listeners = new Set<(event: TranslationEvent) => void>();
   const revisionListeners = new Set<(event: SegmentRevisionEvent) => void>();
   const alternativesListeners = new Set<(event: SegmentAlternativeEvent) => void>();
@@ -143,7 +144,7 @@ export function installBrowserPreviewApi(): void {
       getSession: async () => undefined,
       openHistorySession: async () => false,
       start: async (request) => {
-        const requestId = crypto.randomUUID();
+        const requestId = previewUuid();
         queueMicrotask(() => listeners.forEach((listener) => listener({ requestId, status: "loading" })));
         setTimeout(() => {
           const content = request.mode === "naming"
@@ -168,12 +169,12 @@ export function installBrowserPreviewApi(): void {
     },
     revision: {
       start: async (request) => {
-        const requestId = crypto.randomUUID();
+        const requestId = previewUuid();
         queueMicrotask(() => revisionListeners.forEach((listener) => listener({ requestId, status: "loading" })));
         setTimeout(() => revisionListeners.forEach((listener) => listener({
           requestId,
           status: "success",
-          revision: { id: crypto.randomUUID(), segmentId: request.segment.id, previousTarget: request.segment.target, newTarget: `${request.segment.target}（已按要求调整）`, instruction: request.instruction, createdAt: Date.now() }
+          revision: { id: previewUuid(), segmentId: request.segment.id, previousTarget: request.segment.target, newTarget: `${request.segment.target}（已按要求调整）`, instruction: request.instruction, createdAt: Date.now() }
         })), 250);
         return requestId;
       },
@@ -182,12 +183,12 @@ export function installBrowserPreviewApi(): void {
     },
     alternatives: {
       start: async (request) => {
-        const requestId = crypto.randomUUID();
+        const requestId = previewUuid();
         queueMicrotask(() => alternativesListeners.forEach((listener) => listener({ requestId, status: "loading" })));
         setTimeout(() => alternativesListeners.forEach((listener) => listener({ requestId, status: "success", alternatives: [
-          { id: crypto.randomUUID(), label: "推荐译法", target: request.segment.target, description: "兼顾准确性和自然度" },
-          { id: crypto.randomUUID(), label: "直译", target: `${request.segment.target}（直译）`, description: "尽量保留原文结构" },
-          { id: crypto.randomUUID(), label: "正式表达", target: `${request.segment.target}（正式）`, description: "适合报告和正式文档" }
+          { id: previewUuid(), label: "推荐译法", target: request.segment.target, description: "兼顾准确性和自然度" },
+          { id: previewUuid(), label: "直译", target: `${request.segment.target}（直译）`, description: "尽量保留原文结构" },
+          { id: previewUuid(), label: "正式表达", target: `${request.segment.target}（正式）`, description: "适合报告和正式文档" }
         ] })), 300);
         return requestId;
       },
@@ -239,7 +240,7 @@ export function installBrowserPreviewApi(): void {
       }),
       context: {
         start: async (request) => {
-          const requestId = crypto.randomUUID();
+          const requestId = previewUuid();
           queueMicrotask(() => dictionaryContextListeners.forEach((listener) => listener({ requestId, status: "loading" })));
           setTimeout(() => dictionaryContextListeners.forEach((listener) => listener({ requestId, status: "success", explanation: `“${request.term}”可结合当前句段理解。` })), 200);
           return requestId;

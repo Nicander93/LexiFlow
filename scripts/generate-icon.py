@@ -11,7 +11,12 @@ ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256,
 
 
 def to_square(image: Image.Image) -> Image.Image:
+    bounds = image.getbbox()
+    if bounds:
+        image = image.crop(bounds)
     side = max(image.size)
+    padding = max(1, round(side * 0.12))
+    side += padding * 2
     canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
     canvas.paste(image, ((side - image.width) // 2, (side - image.height) // 2))
     return canvas

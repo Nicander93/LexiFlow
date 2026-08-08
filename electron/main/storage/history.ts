@@ -6,6 +6,7 @@ import {
   applyHistoryRetention,
   HISTORY_SCHEMA_VERSION,
   mergeHistoryRevisions,
+  mergeDuplicateHistory,
   migrateHistory,
   normalizeHistoryItem,
   searchHistory,
@@ -59,7 +60,7 @@ export class HistoryStore {
 
   async add(item: TranslationHistory, settings: HistorySettings): Promise<void> {
     if (!settings.enabled) return;
-    this.items = applyHistoryRetention([normalizeHistoryItem(item), ...this.items], settings).slice(0, settings.maxItems);
+    this.items = applyHistoryRetention(mergeDuplicateHistory(this.items, item), settings).slice(0, settings.maxItems);
     await this.persist();
   }
 

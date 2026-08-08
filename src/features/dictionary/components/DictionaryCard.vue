@@ -61,7 +61,7 @@ function speak(lang: "en-GB" | "en-US"): void {
       <p v-if="entry.labels.contemporaryRank">当代词频：{{ entry.labels.contemporaryRank }}</p>
     </details>
     <div class="dictionary-card-actions">
-      <button class="secondary-button" type="button" @click="emit('aiTranslate')">AI 翻译</button>
+      <button class="text-button" type="button" @click="emit('aiTranslate')">AI 解释（可选）⌄</button>
     </div>
   </article>
 </template>

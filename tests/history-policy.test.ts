@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyHistoryRetention, HISTORY_SCHEMA_VERSION, mergeHistoryRevisions, migrateHistory, normalizeHistoryItem, searchHistory } from "../electron/main/storage/history-policy";
+import { applyHistoryRetention, HISTORY_SCHEMA_VERSION, mergeDuplicateHistory, mergeHistoryRevisions, migrateHistory, normalizeHistoryItem, searchHistory } from "../electron/main/storage/history-policy";
 import type { HistorySettings, TranslationHistory } from "../electron/shared/types";
 
 const settings: HistorySettings = { enabled: true, maxItems: 100, retention: "7d" };
@@ -57,5 +57,15 @@ describe("历史保留策略", () => {
     expect(updated.resultText).toBe("修订后的译文");
     expect(updated.revisions).toHaveLength(1);
     expect(updated.updatedAt).toBeTruthy();
+  });
+
+  it("相同来源的重复查询软合并，不误合并不同来源", () => {
+    const main = normalizeHistoryItem(recent);
+    const merged = mergeDuplicateHistory([main], { ...recent, id: "next", origin: "main" });
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ id: "recent", usageCount: 2 });
+    const popup = mergeDuplicateHistory(merged, { ...recent, id: "popup", origin: "popup" });
+    expect(popup).toHaveLength(2);
+    expect(popup.map((item) => item.origin)).toEqual(["popup", "main"]);
   });
 });

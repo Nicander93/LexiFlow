@@ -1,5 +1,5 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import type { DictionaryLookupResult, SegmentRevision, TargetLanguage, TranslationMode, TranslationProfile, TranslationSegment } from "../../../electron/shared/types";
+import type { DictionaryLookupResult, NamingOptions, SegmentRevision, TargetLanguage, TranslationMode, TranslationProfile, TranslationSegment } from "../../../electron/shared/types";
 import { pickTargetDictionaryQuery, shouldLookupDictionary } from "../../../electron/shared/dictionary-eligibility";
 import { useCopyFeedback } from "../useCopyFeedback";
 import { useDictionary } from "../dictionary/useDictionary";
@@ -14,6 +14,7 @@ type ResultView = "dictionary" | "translation";
 export function useTranslationWorkspace() {
   const sourceText = ref("");
   const mode = ref<TranslationMode>("normal");
+  const namingOptions = ref<NamingOptions>({ type: "variable", style: "camelCase", language: "general" });
   const targetLanguage = ref<TargetLanguage>("auto");
   const { copied, markCopied } = useCopyFeedback();
   const translator = getTranslatorApi();
@@ -173,7 +174,7 @@ export function useTranslationWorkspace() {
     closeDictionary();
     resultView.value = "translation";
     lastTranslatedSource.value = sourceText.value;
-    await start({ text: sourceText.value, mode: mode.value, targetLanguage: targetLanguage.value, profileId: profileId.value, surface: "main" });
+    await start({ text: sourceText.value, mode: mode.value, targetLanguage: mode.value === "naming" ? "en" : targetLanguage.value, profileId: profileId.value, namingOptions: mode.value === "naming" ? namingOptions.value : undefined, surface: "main" });
   }
 
   async function triggerAiTranslate(): Promise<void> {
@@ -315,7 +316,7 @@ export function useTranslationWorkspace() {
   });
 
   return {
-    PROFILE_SHORTCUTS, sourceText, targetLanguage, profiles, profileId, providerLabel, selectProfileShortcut, onProfileChange,
+    PROFILE_SHORTCUTS, sourceText, mode, namingOptions, targetLanguage, profiles, profileId, providerLabel, selectProfileShortcut, onProfileChange,
     maxInputLength, showOriginalText, cleanupNotice, undoCleanupAndRetranslate, isRunning, triggerAiTranslate,
     resultView, showDictionaryTab, showMainDictionary, switchResultView, autoDictionaryResult, dictionaryStatus, dictionaryEligible, dictionarySuggestions, primaryActionLabel,
     status, displayResultText, result, errorMessage, warningMessage, displaySegments, activeSegmentId, copied, copyResult, copySource, copyBilingual, stop, retry,

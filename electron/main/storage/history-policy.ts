@@ -1,6 +1,6 @@
 import type { HistoryRevisionUpdate, HistorySettings, SegmentRevision, TranslationHistory, TranslationSegment } from "../../shared/types";
 
-export const HISTORY_SCHEMA_VERSION = 2;
+export const HISTORY_SCHEMA_VERSION = 3;
 
 export interface StoredHistory {
   schemaVersion: number;
@@ -20,6 +20,9 @@ export function normalizeHistoryItem(item: TranslationHistory): TranslationHisto
     originalSourceText,
     originalResultText,
     isFavorite: Boolean(item.isFavorite),
+    kind: item.kind ?? (item.mode === "naming" ? "naming" : "translation"),
+    origin: item.origin ?? "main",
+    usageCount: Math.max(1, item.usageCount ?? 1),
     revisions: Array.isArray(item.revisions) ? item.revisions : [],
     segments: Array.isArray(item.segments) ? item.segments : undefined,
     updatedAt: item.updatedAt ?? item.createdAt
@@ -86,6 +89,9 @@ function migrateHistoryItem(value: unknown): TranslationHistory | undefined {
     createdAt: value.createdAt,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : value.createdAt,
     isFavorite: Boolean(value.isFavorite),
+    kind: value.kind === "dictionary" || value.kind === "naming" || value.kind === "translation" ? value.kind : value.mode === "naming" ? "naming" : "translation",
+    origin: value.origin === "popup" || value.origin === "ocr" || value.origin === "history" || value.origin === "main" ? value.origin : "main",
+    usageCount: typeof value.usageCount === "number" ? Math.max(1, value.usageCount) : 1,
     revisions: migrateRevisions(value.revisions),
     segments: migrateSegments(value.segments)
   });
@@ -103,8 +109,21 @@ export function migrateHistory(raw: unknown): { data: StoredHistory; migrated: b
       || typeof item.isFavorite !== "boolean"
       || typeof item.originalSourceText !== "string"
       || !Array.isArray(item.revisions)
+      || typeof item.kind !== "string"
+      || typeof item.origin !== "string"
+      || typeof item.usageCount !== "number"
     ));
   return { data: { schemaVersion: HISTORY_SCHEMA_VERSION, items }, migrated };
+}
+
+export function mergeDuplicateHistory(items: TranslationHistory[], incoming: TranslationHistory): TranslationHistory[] {
+  const normalized = normalizeHistoryItem(incoming);
+  const key = normalized.sourceText.trim().toLocaleLowerCase();
+  const index = items.findIndex((item) => item.sourceText.trim().toLocaleLowerCase() === key && item.kind === normalized.kind && item.origin === normalized.origin);
+  if (index < 0) return [normalized, ...items];
+  const previous = normalizeHistoryItem(items[index]!);
+  const merged = normalizeHistoryItem({ ...normalized, id: previous.id, isFavorite: previous.isFavorite, usageCount: (previous.usageCount ?? 1) + 1, createdAt: previous.createdAt, updatedAt: normalized.updatedAt ?? new Date().toISOString() });
+  return [merged, ...items.slice(0, index), ...items.slice(index + 1)];
 }
 
 export function applyHistoryRetention(

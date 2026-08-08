@@ -30,7 +30,6 @@ const categoryCopy = computed(() => ({
   selection: ["划词与快捷键", "设置划词入口，并通过按键直接录制全局快捷键。"],
   translation: ["翻译", "调整目标语言、输入限制和文本整理。"],
   provider: ["模型服务", "连接本地模型或 OpenAI 兼容服务。"],
-  dictionary: ["词典与术语", "维护术语表与翻译配置。"],
   advanced: ["高级", "提示词、诊断与本地数据管理。"]
 }[category.value]));
 
@@ -84,7 +83,7 @@ onMounted(async () => {
         @save="save"
         @error="notify($event, 'error')"
       />
-      <TranslationSettings v-else-if="category === 'translation'" :settings="form.settings.value" @save="save" />
+      <template v-else-if="category === 'translation'"><TranslationSettings :settings="form.settings.value" @save="save" /><DictionarySettings @notify="notify" /></template>
       <ProviderSettings
         v-else-if="category === 'provider'"
         :settings="form.settings.value"
@@ -94,7 +93,6 @@ onMounted(async () => {
         @save="saveProvider"
         @test="saveAndTestProvider"
       />
-      <DictionarySettings v-else-if="category === 'dictionary'" @notify="notify" />
       <AdvancedSettings
         v-else
         :settings="form.settings.value"

@@ -48,6 +48,8 @@ electron/main/index.ts
 | `src/pages/` | 路由页面和页面级编排 |
 | `src/platform/` | preload 获取与浏览器预览适配器 |
 
+Renderer 的主产品入口是无固定侧栏的翻译工作台：`MainAppShell` 提供紧凑顶栏，`TranslationPage` 只组合 workbench、translation、dictionary、OCR 与 history feature。词典、短句、长文双语阅读和命名由输入及模式驱动；历史作为右侧 overlay drawer 恢复同一翻译 Session。`/history` 与 `/naming` 仅保留兼容入口并回到工作台，文档、设置和关于仍是独立 route。
+
 ## 翻译主路径
 
 1. 渲染进程创建请求并保存当前 `requestId`。

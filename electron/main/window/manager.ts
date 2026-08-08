@@ -75,12 +75,14 @@ export class WindowManager {
   async createMainWindow(): Promise<BrowserWindow> {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) return this.mainWindow;
     const window = this.createWindow({
-      width: 960,
-      height: 680,
-      minWidth: 760,
-      minHeight: 560,
+      width: 900,
+      height: 620,
+      minWidth: 720,
+      minHeight: 520,
       show: false,
       title: "LexiFlow",
+      titleBarStyle: "hidden",
+      titleBarOverlay: { color: "#fffefb", symbolColor: "#555a54", height: 28 },
       icon: join(moduleDirectory, "../../build/icon.ico")
     });
     this.mainWindow = window;

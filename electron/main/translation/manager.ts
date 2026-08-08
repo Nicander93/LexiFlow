@@ -167,6 +167,9 @@ export class TranslationManager {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isFavorite: false,
+        kind: output.policy.historyMode === "naming" ? "naming" : "translation",
+        origin: request.surface ?? "main",
+        usageCount: 1,
         revisions: [],
         segments: result?.segments
       }, settings.history));

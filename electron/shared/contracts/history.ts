@@ -17,6 +17,9 @@ export interface TranslationHistory {
   createdAt: string;
   updatedAt?: string;
   isFavorite: boolean;
+  kind?: "dictionary" | "translation" | "naming";
+  origin?: "main" | "popup" | "ocr" | "history";
+  usageCount?: number;
   revisions?: SegmentRevision[];
   segments?: TranslationSegment[];
 }
