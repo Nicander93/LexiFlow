@@ -80,14 +80,33 @@ export async function bootstrapApplication(): Promise<void> {
     exportDiagnostics: () => diagnosticsExporter.export()
   });
 
+  const openSelectionInMain = async (text: string, mode: TranslationMode, profileId?: string): Promise<void> => {
+    const mainWindow = await windowManager.showMainWindow(mode === "naming" ? "/?mode=naming" : "/");
+    if (!text.trim()) return;
+    translationManager.start(mainWindow.webContents, {
+      text,
+      mode,
+      targetLanguage: mode === "naming" ? "en" : "auto",
+      profileId,
+      namingOptions: mode === "naming" ? { type: "variable", style: "camelCase", language: "general" } : undefined,
+      surface: "main"
+    });
+  };
+
   const triggerSelection = async (mode: TranslationMode, profileId?: string): Promise<void> => {
     const resolvedProfileId = mode === "naming"
       ? undefined
       : (profileId ?? settingsStore.get().shortcuts.defaultTranslationProfileId) || "technical";
-    await windowManager.showPopup({ mode, profileId: resolvedProfileId, capturing: true });
     translationManager.cancelLane("popup-translation");
     const selection = await captureSelectedText(settingsStore.get().translation.maxInputLength);
-    await windowManager.showPopup({ mode, profileId: resolvedProfileId, text: selection.text, error: selection.error });
+    if (windowManager.isPopupPinned()) {
+      await openSelectionInMain(selection.text, mode, resolvedProfileId);
+      return;
+    }
+    await windowManager.showPopup(
+      { mode, profileId: resolvedProfileId, text: selection.text, error: selection.error },
+      { focus: true }
+    );
   };
 
   const triggerQuickTranslate = async (): Promise<void> => {
@@ -97,8 +116,13 @@ export async function bootstrapApplication(): Promise<void> {
 
   const showCapturedSelection = async (text: string): Promise<void> => {
     const profileId = settingsStore.get().shortcuts.defaultTranslationProfileId || "technical";
+    const mode = modeShortcutForProfile(profileId);
     translationManager.cancelLane("popup-translation");
-    await windowManager.showPopup({ mode: modeShortcutForProfile(profileId), profileId, text });
+    if (windowManager.isPopupPinned()) {
+      await openSelectionInMain(text, mode, profileId);
+      return;
+    }
+    await windowManager.showPopup({ mode, profileId, text }, { focus: true });
   };
 
   const selectionController = new SelectionController({

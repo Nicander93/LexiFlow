@@ -45,7 +45,7 @@ export function useDictionary(debounceMs = 220) {
         found: false,
         matchType: "none",
         suggestions: [],
-        unavailableReason: "词典查询失败，请使用 AI 翻译或重新启动应用。"
+        unavailableReason: "词典查询失败，请按文本翻译或重新启动应用。"
       };
     }
   }

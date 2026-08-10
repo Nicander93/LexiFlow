@@ -4,7 +4,8 @@ import { getTranslatorApi } from "../../platform/translator";
 
 export function useOcrCapture(options: {
   sourceText: Ref<string>;
-  onCopied?: () => void;
+  onRecognized?: (text: string) => void;
+  onError?: (error: string) => void;
 }) {
   const translator = getTranslatorApi();
   const ocrResult = ref<OcrResult>();
@@ -15,14 +16,13 @@ export function useOcrCapture(options: {
   const ocrImage = ref<HTMLElement>();
   const ocrSelection = ref<{ startX: number; startY: number; endX: number; endY: number }>();
   const selectingOcr = ref(false);
-  const ocrEditedText = ref("");
 
   async function captureOcr(): Promise<void> {
     ocrLoading.value = true;
     ocrError.value = "";
     try {
       if (ocrResult.value?.captureId) translator.ocr.cancel(ocrResult.value.captureId);
-      const captured = await translator.ocr.captureScreen(ocrScreenId.value);
+      const captured = await translator.ocr.captureScreen({ screenId: ocrScreenId.value, excludeMainWindow: true });
       ocrResult.value = {
         captureId: captured.captureId,
         text: "",
@@ -31,28 +31,12 @@ export function useOcrCapture(options: {
         imageWidth: captured.pixelWidth,
         imageHeight: captured.pixelHeight
       };
-      ocrEditedText.value = "";
     } catch (error) {
       ocrError.value = error instanceof Error ? error.message : "OCR 识别失败。";
+      options.onError?.(ocrError.value);
     } finally {
       ocrLoading.value = false;
     }
-  }
-
-  function useOcrBlock(text: string): void {
-    options.sourceText.value = text;
-    ocrEditedText.value = text;
-  }
-
-  function applyOcrEditedText(): void {
-    if (!ocrEditedText.value.trim()) return;
-    options.sourceText.value = ocrEditedText.value;
-  }
-
-  async function copyOcrText(): Promise<void> {
-    if (!ocrResult.value?.text) return;
-    await translator.clipboard.writeText(ocrResult.value.text);
-    options.onCopied?.();
   }
 
   function pointInOcrImage(event: PointerEvent): { x: number; y: number } | undefined {
@@ -118,10 +102,16 @@ export function useOcrCapture(options: {
         }
       });
       ocrResult.value = recognized;
-      ocrEditedText.value = recognized.text;
-      if (recognized.text) options.sourceText.value = recognized.text;
+      if (recognized.text) {
+        options.sourceText.value = recognized.text;
+        options.onRecognized?.(recognized.text);
+      } else {
+        ocrError.value = "未识别到文字，请重新截图并框选更清晰的区域。";
+        options.onError?.(ocrError.value);
+      }
     } catch (error) {
       ocrError.value = error instanceof Error ? error.message : "OCR 识别失败。";
+      options.onError?.(ocrError.value);
     } finally {
       ocrLoading.value = false;
     }
@@ -131,7 +121,6 @@ export function useOcrCapture(options: {
     if (ocrResult.value?.captureId) translator.ocr.cancel(ocrResult.value.captureId);
     ocrResult.value = undefined;
     ocrSelection.value = undefined;
-    ocrEditedText.value = "";
     ocrError.value = "";
   }
 
@@ -177,12 +166,8 @@ export function useOcrCapture(options: {
     ocrImage,
     ocrSelection,
     selectingOcr,
-    ocrEditedText,
     ocrSelectionStyle,
     captureOcr,
-    useOcrBlock,
-    applyOcrEditedText,
-    copyOcrText,
     beginOcrSelection,
     moveOcrSelection,
     endOcrSelection,

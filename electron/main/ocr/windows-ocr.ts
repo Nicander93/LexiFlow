@@ -13,12 +13,32 @@ import { normalizedToPixels } from "./geometry";
 const run = promisify(execFile);
 const OCR_SCRIPT = `
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$file = [Windows.Storage.StorageFile]::GetFileFromPathAsync($args[0]); $file = [System.WindowsRuntimeSystemExtensions]::AsTask($file).GetAwaiter().GetResult()
-$stream = $file.OpenAsync([Windows.Storage.FileAccessMode]::Read); $stream = [System.WindowsRuntimeSystemExtensions]::AsTask($stream).GetAwaiter().GetResult()
-$decoder = [Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream); $decoder = [System.WindowsRuntimeSystemExtensions]::AsTask($decoder).GetAwaiter().GetResult()
-$bitmap = $decoder.GetSoftwareBitmapAsync(); $bitmap = [System.WindowsRuntimeSystemExtensions]::AsTask($bitmap).GetAwaiter().GetResult()
-$engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages(); if ($null -eq $engine) { throw 'OCR_LANGUAGE_PACK_MISSING' }
-$result = $engine.RecognizeAsync($bitmap); $result = [System.WindowsRuntimeSystemExtensions]::AsTask($result).GetAwaiter().GetResult()
+[Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime] | Out-Null
+[Windows.Storage.FileAccessMode, Windows.Storage, ContentType = WindowsRuntime] | Out-Null
+[Windows.Storage.Streams.IRandomAccessStream, Windows.Storage.Streams, ContentType = WindowsRuntime] | Out-Null
+[Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics.Imaging, ContentType = WindowsRuntime] | Out-Null
+[Windows.Graphics.Imaging.SoftwareBitmap, Windows.Graphics.Imaging, ContentType = WindowsRuntime] | Out-Null
+[Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime] | Out-Null
+[Windows.Media.Ocr.OcrResult, Windows.Foundation, ContentType = WindowsRuntime] | Out-Null
+function Await-WinRt($operation, [Type]$resultType) {
+  $method = [System.WindowsRuntimeSystemExtensions].GetMethods() |
+    Where-Object { $_.Name -eq 'AsTask' -and $_.IsGenericMethod -and $_.GetParameters().Count -eq 1 } |
+    Select-Object -First 1
+  $task = $method.MakeGenericMethod($resultType).Invoke($null, @($operation))
+  $task.GetAwaiter().GetResult()
+}
+$file = Await-WinRt ([Windows.Storage.StorageFile]::GetFileFromPathAsync($env:LEXIFLOW_OCR_IMAGE_PATH)) ([Windows.Storage.StorageFile])
+$stream = Await-WinRt ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
+$decoder = Await-WinRt ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
+$bitmap = Await-WinRt ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+$engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+if ($null -eq $engine) {
+  $availableLanguages = @([Windows.Media.Ocr.OcrEngine]::AvailableRecognizerLanguages)
+  if ($availableLanguages.Count -eq 0) { throw 'OCR_LANGUAGE_PACK_MISSING' }
+  $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($availableLanguages[0])
+}
+if ($null -eq $engine) { throw 'OCR_LANGUAGE_PACK_MISSING' }
+$result = Await-WinRt ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
 $lines = @($result.Lines | ForEach-Object {
   $words = @($_.Words)
   $left = ($words | ForEach-Object { [double]$_.BoundingRect.X } | Measure-Object -Minimum).Minimum
@@ -32,11 +52,17 @@ $lines = @($result.Lines | ForEach-Object {
 
 interface EngineResult { text: string; blocks: OcrBlock[]; }
 
-class WindowsOcrEngine {
+export class WindowsOcrEngine {
   async recognize(imagePath: string, signal: AbortSignal): Promise<EngineResult> {
     if (process.platform !== "win32") throw new OcrError("OCR_UNSUPPORTED_PLATFORM", "当前平台不支持 Windows OCR。");
     try {
-      const { stdout } = await run("powershell.exe", ["-NoProfile", "-Command", OCR_SCRIPT, imagePath], { windowsHide: true, maxBuffer: 8 * 1024 * 1024, timeout: 20_000, signal });
+      const { stdout } = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", OCR_SCRIPT], {
+        windowsHide: true,
+        maxBuffer: 8 * 1024 * 1024,
+        timeout: 20_000,
+        signal,
+        env: { ...process.env, LEXIFLOW_OCR_IMAGE_PATH: imagePath }
+      });
       const value = JSON.parse(stdout) as { text?: string; blocks?: Array<{ text?: string; x?: number; y?: number; width?: number; height?: number }> };
       const blocks = (value.blocks ?? []).filter((block) => typeof block.text === "string" && block.text.trim()).map((block, index) => ({
         id: `ocr-${randomUUID()}-${index + 1}`,
@@ -99,4 +125,3 @@ export class WindowsOcrService {
     this.captureService.release(captureId);
   }
 }
-

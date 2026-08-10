@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import AppIcon from "../components/AppIcon.vue";
 import PageHeader from "../components/PageHeader.vue";
+import UiSelect from "../components/UiSelect.vue";
 import { getTranslatorApi } from "../platform/translator";
 import type { DocumentTaskRecord, TranslationProfile } from "../../electron/shared/types";
 
@@ -26,7 +27,7 @@ onUnmounted(unsubscribe);
 
 <template>
   <div class="page">
-    <PageHeader title="文档"><div class="document-import"><select v-model="profileId"><option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option></select><button class="primary-button" :disabled="busy" @click="importDocument">{{ busy ? '正在选择…' : '导入文档' }}</button></div></PageHeader>
+    <PageHeader title="文档"><div class="document-import"><UiSelect v-model="profileId" :options="profiles.map((profile) => ({ value: profile.id, label: profile.name }))" label="翻译配置" /><button class="primary-button" :disabled="busy" @click="importDocument">{{ busy ? '正在选择…' : '导入文档' }}</button></div></PageHeader>
     <div v-if="error" class="error-card">{{ error }}</div>
     <section v-if="!tasks.length" class="empty-card">导入文档后会显示可暂停、取消与恢复的本地任务。</section>
     <section v-else class="document-list"><article v-for="task in tasks" :key="task.id" class="document-task surface"><div><strong>{{ task.fileName }}</strong><small>{{ task.format.toUpperCase() }} · {{ task.completedChunks }} / {{ task.totalChunks }} · {{ task.status }}{{ task.failedChunks && Object.keys(task.failedChunks).length ? ` · 失败 ${Object.keys(task.failedChunks).length} 块` : '' }}</small><small v-if="task.error" class="error-text">{{ task.error }}</small></div><div class="document-progress"><span :style="{ width: `${task.totalChunks ? task.completedChunks / task.totalChunks * 100 : 0}%` }" /></div><div class="document-actions"><button v-if="task.status === 'created' || task.status === 'paused'" class="secondary-button" @click="start(task)">开始 / 恢复</button><button v-if="task.status === 'failed'" class="secondary-button" @click="start(task)">重试失败分块</button><button v-if="task.status === 'translating'" class="secondary-button" @click="pause(task)">暂停</button><button v-if="task.status === 'translating' || task.status === 'paused'" class="text-button danger" @click="cancel(task)">取消</button><button v-if="task.status === 'completed'" class="text-button" @click="exportTask(task, 'translated')">导出译文</button><button v-if="task.status === 'completed'" class="text-button" @click="exportTask(task, 'bilingual')">导出双语</button><button v-if="task.status === 'completed'" class="text-button" @click="exportTask(task, 'json')">导出 JSON</button><button class="icon-button" title="删除任务" @click="remove(task)"><AppIcon name="trash" :size="15" /></button></div></article></section>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { AppSettings, ProviderModel } from "../../../../electron/shared/types";
+import UiSelect from "../../../components/UiSelect.vue";
 import SettingGroup from "../components/SettingGroup.vue";
 import SettingRow from "../components/SettingRow.vue";
 
@@ -17,15 +18,21 @@ const emit = defineEmits<{
 
 const apiKey = ref("");
 const advancedOpen = ref(false);
+const providerOptions = [
+  { value: "ollama", label: "Ollama" },
+  { value: "openai-compatible", label: "OpenAI 兼容服务" }
+];
 </script>
 
 <template>
   <SettingGroup title="模型服务">
     <SettingRow title="模型服务类型">
-      <select v-model="settings.provider.type" aria-label="模型服务类型">
-        <option value="ollama">Ollama</option>
-        <option value="openai-compatible">OpenAI 兼容服务</option>
-      </select>
+      <UiSelect
+        :model-value="settings.provider.type"
+        :options="providerOptions"
+        label="模型服务类型"
+        @update:model-value="settings.provider.type = $event as AppSettings['provider']['type']"
+      />
     </SettingRow>
     <SettingRow title="服务地址">
       <input v-model="settings.provider.baseUrl" aria-label="服务地址" placeholder="http://127.0.0.1:11434" />

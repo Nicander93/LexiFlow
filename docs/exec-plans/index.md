@@ -7,3 +7,7 @@
 - [计划模板](_template.md)：新计划的起点；按实际任务删减无关章节，不保留空模板字段。
 
 计划描述必须以当前代码和 `docs/` 根目录文档为依据。涉及 IPC、模型调用、本地数据或隐私时，应明确对应约束和验证方式。
+
+## 最近完成
+
+- [UI/UX VNext Round 2](completed/uiux-vnext-round2.md)：工作台、History、OCR、Popup、设置控件与视觉一致性重构。

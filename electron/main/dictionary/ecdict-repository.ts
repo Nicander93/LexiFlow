@@ -53,7 +53,7 @@ export class EcdictRepository implements DictionaryRepository {
         this.status = {
           available: false,
           source: "ECDICT",
-          message: "本地词典资源不可用，仍可使用 AI 翻译。"
+          message: "本地词典资源不可用，仍可按文本翻译。"
         };
         return;
       }
@@ -89,7 +89,7 @@ export class EcdictRepository implements DictionaryRepository {
       this.status = {
         available: false,
         source: "ECDICT",
-        message: "本地词典资源不可用，仍可使用 AI 翻译。"
+        message: "本地词典资源不可用，仍可按文本翻译。"
       };
     }
   }

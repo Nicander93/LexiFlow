@@ -10,15 +10,15 @@ import NotFoundPage from "../pages/NotFoundPage.vue";
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: "/", component: TranslationPage },
+    { path: "/", component: TranslationPage, meta: { shell: "workbench" } },
     { path: "/naming", redirect: "/?mode=naming" },
-    { path: "/history", redirect: "/?drawer=history" },
-    { path: "/documents", component: DocumentsPage },
-    { path: "/settings", component: SettingsPage },
-    { path: "/about", component: AboutPage },
-    { path: "/popup", component: PopupPage, meta: { popup: true } },
-    { path: "/selection-tip", component: SelectionTipPage, meta: { popup: true } },
-    { path: "/:pathMatch(.*)*", component: NotFoundPage }
+    { path: "/history", redirect: "/" },
+    { path: "/documents", component: DocumentsPage, meta: { shell: "secondary" } },
+    { path: "/settings", component: SettingsPage, meta: { shell: "secondary" } },
+    { path: "/about", component: AboutPage, meta: { shell: "secondary" } },
+    { path: "/popup", component: PopupPage, meta: { shell: "popup", popup: true } },
+    { path: "/selection-tip", component: SelectionTipPage, meta: { shell: "popup", popup: true } },
+    { path: "/:pathMatch(.*)*", component: NotFoundPage, meta: { shell: "secondary" } }
   ]
 });
 

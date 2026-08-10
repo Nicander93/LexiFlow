@@ -6,6 +6,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import {
   IPC_CHANNELS,
   type AppSettings,
+  type CaptureScreenOptions,
   type CaptureScreenResult,
   type DictionaryLookupRequest,
   type DictionaryLookupResult,
@@ -135,7 +136,7 @@ const api = {
   },
   ocr: {
     listScreens: (): Promise<OcrScreen[]> => ipcRenderer.invoke(IPC_CHANNELS.ocrListScreens),
-    captureScreen: (screenId?: string): Promise<CaptureScreenResult> => ipcRenderer.invoke(IPC_CHANNELS.ocrCaptureScreen, screenId),
+    captureScreen: (options?: CaptureScreenOptions): Promise<CaptureScreenResult> => ipcRenderer.invoke(IPC_CHANNELS.ocrCaptureScreen, options),
     recognizeRegion: (request: RecognizeRegionRequest): Promise<OcrResult> => ipcRenderer.invoke(IPC_CHANNELS.ocrRecognizeRegion, request),
     cancel: (captureId: string): void => ipcRenderer.send(IPC_CHANNELS.ocrCancel, captureId),
     onCaptureRequested: (listener: () => void): (() => void) => on(IPC_CHANNELS.ocrCaptureRequested, listener)

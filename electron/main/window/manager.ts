@@ -75,14 +75,14 @@ export class WindowManager {
   async createMainWindow(): Promise<BrowserWindow> {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) return this.mainWindow;
     const window = this.createWindow({
-      width: 900,
-      height: 620,
-      minWidth: 720,
-      minHeight: 520,
+      width: 760,
+      height: 540,
+      minWidth: 640,
+      minHeight: 460,
       show: false,
       title: "LexiFlow",
       titleBarStyle: "hidden",
-      titleBarOverlay: { color: "#fffefb", symbolColor: "#555a54", height: 28 },
+      titleBarOverlay: { color: "#fffefb", symbolColor: "#555a54", height: 42 },
       icon: join(moduleDirectory, "../../build/icon.ico")
     });
     this.mainWindow = window;
@@ -118,6 +118,23 @@ export class WindowManager {
     window.show();
     window.focus();
     window.webContents.send(IPC_CHANNELS.ocrCaptureRequested);
+  }
+
+  /** OCR 框选不应把 LexiFlow 主窗本身截进素材；捕获后恢复原可见/聚焦状态。 */
+  async withMainWindowHiddenForCapture<T>(capture: () => Promise<T>): Promise<T> {
+    const window = this.mainWindow;
+    if (!window || window.isDestroyed() || !window.isVisible()) return capture();
+    const wasFocused = window.isFocused();
+    window.hide();
+    await new Promise<void>((resolve) => setTimeout(resolve, 140));
+    try {
+      return await capture();
+    } finally {
+      if (!window.isDestroyed()) {
+        window.show();
+        if (wasFocused) window.focus();
+      }
+    }
   }
 
   private maxPopupHeight(display = screen.getPrimaryDisplay()): number {
@@ -167,15 +184,17 @@ export class WindowManager {
     return window;
   }
 
-  /** 按内容类型调整高度：词典紧凑，长文本抬高。 */
+  /** 按内容类型离散调整高度，避免 ResizeObserver 反馈环。 */
   adaptPopupHeight(kind: "dictionary" | "translation" | "naming" | "default" = "default", contentHeight?: number): void {
     if (!this.popupWindow || this.popupWindow.isDestroyed()) return;
     const cursor = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursor);
-    const maxHeight = this.maxPopupHeight(display);
+    const maxHeight = Math.min(420, this.maxPopupHeight(display));
     const [width] = this.popupWindow.getSize();
-    const fallbackHeight = kind === "dictionary" ? 250 : kind === "naming" ? 300 : kind === "translation" ? 340 : 280;
-    const height = Math.min(maxHeight, Math.max(220, Math.round(contentHeight ?? fallbackHeight)));
+    const minHeight = kind === "dictionary" ? 240 : kind === "naming" ? 300 : kind === "translation" ? 260 : 220;
+    const preferred = kind === "dictionary" ? 240 : kind === "naming" ? 300 : kind === "translation" ? 280 : 220;
+    const measured = typeof contentHeight === "number" && Number.isFinite(contentHeight) ? contentHeight : preferred;
+    const height = Math.min(maxHeight, Math.max(minHeight, Math.round(measured)));
     const [, currentHeight] = this.popupWindow.getSize();
     if (currentHeight === height) return;
     this.popupBoundsPersistence?.beginProgrammaticResize();
@@ -183,9 +202,16 @@ export class WindowManager {
     this.popupWindow.setSize(width, height, false);
   }
 
-  async showPopup(payload: PopupPayload): Promise<void> {
+  isPopupPinned(): boolean {
+    return this.popupPinned;
+  }
+
+  async showPopup(payload: PopupPayload, options?: { focus?: boolean }): Promise<void> {
+    if (this.popupPinned && this.popupWindow && !this.popupWindow.isDestroyed() && this.popupWindow.isVisible()) {
+      return;
+    }
     const window = await this.ensurePopupWindow();
-    const kind = payload.mode === "naming" ? "naming" : "translation";
+    const kind = payload.capturing ? "default" : payload.mode === "naming" ? "naming" : "translation";
     this.adaptPopupHeight(kind);
     const cursor = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursor);
@@ -194,15 +220,20 @@ export class WindowManager {
     const x = Math.min(Math.max(cursor.x + 16, bounds.x), bounds.x + bounds.width - width);
     const y = Math.min(Math.max(cursor.y + 16, bounds.y), bounds.y + bounds.height - height);
     window.setPosition(Math.round(x), Math.round(y), false);
-    window.showInactive();
     window.webContents.send(IPC_CHANNELS.popupPayload, payload);
+    if (options?.focus === false || payload.capturing) {
+      window.showInactive();
+      return;
+    }
+    window.show();
+    window.focus();
   }
 
   private async ensureSelectionTipWindow(): Promise<BrowserWindow> {
     if (this.selectionTipWindow && !this.selectionTipWindow.isDestroyed()) return this.selectionTipWindow;
     const window = this.createWindow({
-      width: 34,
-      height: 34,
+      width: 28,
+      height: 28,
       show: false,
       frame: false,
       transparent: true,

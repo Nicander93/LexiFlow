@@ -6,25 +6,26 @@
 }
 .selection-tip-body::before { display: none; }
 .selection-tip {
-  width: 30px;
-  height: 30px;
-  margin: 2px;
-  padding: 3px;
-  overflow: hidden;
-  border: 1px solid rgba(87, 148, 93, .26);
-  border-radius: 8px;
-  background: rgba(255, 254, 251, .97);
-  box-shadow: 0 4px 12px rgba(53, 62, 50, .18);
-  transition: transform .15s ease, box-shadow .15s ease;
+  width: 26px;
+  height: 26px;
+  margin: 1px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: transform .15s ease;
 }
 .selection-tip:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(87, 148, 93, .24);
+  transform: scale(1.08);
+  background: transparent;
+  box-shadow: 0 0 0 6px rgba(110, 174, 114, .12);
 }
 .selection-tip img {
   display: block;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 0;
-  transform: scale(1.55);
 }

@@ -1,20 +1,27 @@
 <script setup lang="ts">
 import type { AppSettings } from "../../../../electron/shared/types";
+import UiSelect from "../../../components/UiSelect.vue";
 import SettingGroup from "../components/SettingGroup.vue";
 import SettingRow from "../components/SettingRow.vue";
 
 defineProps<{ settings: AppSettings }>();
 const emit = defineEmits<{ save: [] }>();
+const targetLanguageOptions = [
+  { value: "auto", label: "自动识别" },
+  { value: "zh-CN", label: "中文" },
+  { value: "en", label: "英文" }
+];
 </script>
 
 <template>
   <SettingGroup title="翻译偏好">
     <SettingRow title="默认目标语言">
-      <select v-model="settings.translation.targetLanguage" aria-label="默认目标语言" @change="emit('save')">
-        <option value="auto">自动识别</option>
-        <option value="zh-CN">中文</option>
-        <option value="en">英文</option>
-      </select>
+      <UiSelect
+        :model-value="settings.translation.targetLanguage"
+        :options="targetLanguageOptions"
+        label="默认目标语言"
+        @update:model-value="settings.translation.targetLanguage = $event as AppSettings['translation']['targetLanguage']; emit('save')"
+      />
     </SettingRow>
     <SettingRow title="最大输入长度" description="按 Enter 或移开焦点后保存">
       <input v-model.number="settings.translation.maxInputLength" aria-label="最大输入长度" type="number" min="100" max="100000" @blur="emit('save')" @keydown.enter="($event.target as HTMLInputElement).blur()" />

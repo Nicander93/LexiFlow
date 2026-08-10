@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { getTranslatorApi } from "../platform/translator";
-import logoUrl from "../assets/logo.png";
+import selectionMarkUrl from "../assets/selection-mark.svg";
 
 const translator = getTranslatorApi();
 
@@ -19,6 +19,6 @@ onUnmounted(() => document.body.classList.remove("selection-tip-body"));
 
 <template>
   <button class="selection-tip" title="翻译选中文字" aria-label="翻译选中文字" @click="translateSelection" @contextmenu.prevent="dismiss">
-    <img :src="logoUrl" alt="" />
+    <img :src="selectionMarkUrl" alt="" />
   </button>
 </template>

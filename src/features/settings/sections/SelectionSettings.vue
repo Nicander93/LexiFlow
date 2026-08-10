@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AppSettings, TranslationProfile } from "../../../../electron/shared/types";
+import UiSelect from "../../../components/UiSelect.vue";
 import SettingGroup from "../components/SettingGroup.vue";
 import SettingRow from "../components/SettingRow.vue";
 import ShortcutRecorder from "../ShortcutRecorder.vue";
@@ -55,9 +56,12 @@ function commitShortcut(key: "translation" | "naming" | "screenshot", value: str
       />
     </SettingRow>
     <SettingRow title="快速翻译默认配置">
-      <select v-model="settings.shortcuts.defaultTranslationProfileId" aria-label="快速翻译默认配置" @change="emit('save')">
-        <option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
-      </select>
+      <UiSelect
+        :model-value="settings.shortcuts.defaultTranslationProfileId"
+        :options="profiles.map((profile) => ({ value: profile.id, label: profile.name }))"
+        label="快速翻译默认配置"
+        @update:model-value="settings.shortcuts.defaultTranslationProfileId = $event; emit('save')"
+      />
     </SettingRow>
   </SettingGroup>
 </template>

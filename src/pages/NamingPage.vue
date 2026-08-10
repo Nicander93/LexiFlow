@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import PageHeader from "../components/PageHeader.vue";
+import UiSelect from "../components/UiSelect.vue";
 import { useTranslation } from "../features/translation/useTranslation";
 import type { NamingOptions, NamingResult } from "../../electron/shared/types";
 import { getTranslatorApi } from "../platform/translator";
@@ -10,6 +11,18 @@ const options = ref<NamingOptions>({ type: "boolean", style: "camelCase", langua
 const copiedName = ref("");
 const translator = getTranslatorApi();
 const { status, resultText, errorMessage, isRunning, start, stop, retry } = useTranslation();
+const namingTypeOptions = [
+  { value: "variable", label: "普通变量" }, { value: "boolean", label: "布尔变量" },
+  { value: "method", label: "方法" }, { value: "class", label: "类" },
+  { value: "interface", label: "接口" }, { value: "database_field", label: "数据库字段" },
+  { value: "constant", label: "常量" }, { value: "file", label: "文件名" }, { value: "api_path", label: "接口路径" }
+];
+const namingStyleOptions = ["camelCase", "PascalCase", "snake_case", "SCREAMING_SNAKE_CASE", "kebab-case"].map((value) => ({ value, label: value }));
+const languageOptions = [
+  { value: "java", label: "Java" }, { value: "typescript", label: "TypeScript" },
+  { value: "javascript", label: "JavaScript" }, { value: "python", label: "Python" },
+  { value: "sql", label: "SQL" }, { value: "general", label: "通用" }
+];
 
 const namingResult = computed<NamingResult | null>(() => {
   if (status.value !== "success") return null;
@@ -33,9 +46,9 @@ async function copyName(name: string): Promise<void> {
     <section class="surface naming-form">
       <label class="wide-field">业务语义<textarea v-model="sourceText" placeholder="例如：是否已经完成水文数据同步" @keydown.ctrl.enter.prevent="generate" /></label>
       <div class="form-grid">
-        <label>命名类型<select v-model="options.type"><option value="variable">普通变量</option><option value="boolean">布尔变量</option><option value="method">方法</option><option value="class">类</option><option value="interface">接口</option><option value="database_field">数据库字段</option><option value="constant">常量</option><option value="file">文件名</option><option value="api_path">接口路径</option></select></label>
-        <label>命名风格<select v-model="options.style"><option>camelCase</option><option>PascalCase</option><option>snake_case</option><option>SCREAMING_SNAKE_CASE</option><option>kebab-case</option></select></label>
-        <label>目标语言<select v-model="options.language"><option value="java">Java</option><option value="typescript">TypeScript</option><option value="javascript">JavaScript</option><option value="python">Python</option><option value="sql">SQL</option><option value="general">通用</option></select></label>
+        <label>命名类型<UiSelect :model-value="options.type" :options="namingTypeOptions" label="命名类型" @update:model-value="options.type = $event as NamingOptions['type']" /></label>
+        <label>命名风格<UiSelect :model-value="options.style" :options="namingStyleOptions" label="命名风格" @update:model-value="options.style = $event as NamingOptions['style']" /></label>
+        <label>目标语言<UiSelect :model-value="options.language" :options="languageOptions" label="目标语言" @update:model-value="options.language = $event as NamingOptions['language']" /></label>
       </div>
       <div class="form-actions"><button v-if="isRunning" class="secondary-button" @click="stop">停止</button><button class="primary-button" :disabled="isRunning" @click="generate">生成名称</button></div>
     </section>

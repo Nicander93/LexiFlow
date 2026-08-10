@@ -1,5 +1,5 @@
 import type { AppSettings, SettingsPatch, SettingsSnapshot } from "./settings";
-import type { CaptureScreenResult, OcrResult, OcrScreen, RecognizeRegionRequest } from "./ocr";
+import type { CaptureScreenOptions, CaptureScreenResult, OcrResult, OcrScreen, RecognizeRegionRequest } from "./ocr";
 import type { DictionaryContextEvent, DictionaryContextRequest, DictionaryLookupRequest, DictionaryLookupResult, DictionaryStatus } from "./dictionary";
 import type { GlossaryConflict, GlossaryEntry, GlossaryExportResult, GlossaryImportResult } from "./glossary";
 import type { PopupPayload } from "./window";
@@ -63,7 +63,7 @@ export interface TranslatorApi {
   diagnostics: { exportReport: () => Promise<{ saved: boolean; path?: string }> };
   ocr: {
     listScreens: () => Promise<OcrScreen[]>;
-    captureScreen: (screenId?: string) => Promise<CaptureScreenResult>;
+    captureScreen: (options?: CaptureScreenOptions) => Promise<CaptureScreenResult>;
     recognizeRegion: (request: RecognizeRegionRequest) => Promise<OcrResult>;
     cancel: (captureId: string) => void;
     onCaptureRequested: (listener: () => void) => () => void;

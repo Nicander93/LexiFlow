@@ -2,7 +2,7 @@
 defineProps<{
   name:
     | "translate" | "sparkle" | "history" | "settings" | "info"
-    | "copy" | "stop" | "refresh" | "trash" | "search"
+    | "copy" | "stop" | "refresh" | "trash" | "search" | "document"
     | "server" | "keyboard" | "shield" | "chevron" | "check" | "bilingual";
   size?: number;
 }>();
@@ -33,6 +33,10 @@ defineProps<{
     <template v-else-if="name === 'history'">
       <path d="M3.5 12a8.5 8.5 0 1 0 2.2-5.7L3.5 8.5" /><path d="M3.5 4.5v4h4" />
       <path d="M12 7.5V12l3 1.8" />
+    </template>
+    <template v-else-if="name === 'document'">
+      <path d="M7 3.5h7l4 4V20a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 20V5A1.5 1.5 0 0 1 7 3.5Z" />
+      <path d="M14 3.5V8h4.5M9 12h6M9 16h6" />
     </template>
     <template v-else-if="name === 'settings'">
       <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.1A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06L7.06 3.8l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 9c.12.39.33.73.6 1 .3.3.68.44 1.1.4h.1v4h-.1a1.7 1.7 0 0 0-1.7.6Z" />

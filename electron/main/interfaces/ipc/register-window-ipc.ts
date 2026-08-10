@@ -6,7 +6,16 @@ import type { IpcDependencies } from "./types";
 export function registerWindowIpc(dependencies: IpcDependencies): void {
   const { windowManager, translationManager } = dependencies;
   registerOn(IPC_CHANNELS.clipboardWrite, (_event, text: string) => dependencies.clipboardWrite(parseString(text, "剪贴板内容", 100_000)));
-  registerOn(IPC_CHANNELS.windowOpenMain, (_event, route?: string) => void windowManager.showMainWindow(parseRoute(route)));
+  registerOn(IPC_CHANNELS.windowOpenMain, (_event, route?: string) => {
+    void (async () => {
+      const mainWindow = await windowManager.showMainWindow(parseRoute(route));
+      translationManager.pushActiveSession(mainWindow.webContents);
+      if (!windowManager.isPopupPinned()) {
+        translationManager.cancelLane("popup-translation");
+        windowManager.hidePopup();
+      }
+    })();
+  });
   registerOn(IPC_CHANNELS.popupClose, () => {
     translationManager.cancelLane("popup-translation");
     windowManager.hidePopup();

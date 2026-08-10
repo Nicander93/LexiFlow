@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import type { GlossaryConflict, GlossaryEntry, TranslationProfile } from "../../../../electron/shared/types";
+import UiSelect from "../../../components/UiSelect.vue";
 import { getTranslatorApi } from "../../../platform/translator";
 import SettingGroup from "../components/SettingGroup.vue";
 
@@ -12,6 +13,21 @@ const conflicts = ref<GlossaryConflict[]>([]);
 const profiles = ref<TranslationProfile[]>([]);
 const profileDraft = ref<TranslationProfile>();
 const draft = ref(emptyDraft());
+const matchModeOptions = [
+  { value: "word", label: "完整单词" },
+  { value: "exact", label: "精确文本" },
+  { value: "phrase", label: "短语" }
+];
+const profileLanguageOptions = [
+  { value: "auto", label: "自动" },
+  { value: "zh-CN", label: "中文" },
+  { value: "en", label: "英文" }
+];
+const dictionaryModeOptions = [
+  { value: "off", label: "关闭" },
+  { value: "basic", label: "基础" },
+  { value: "contextual", label: "上下文" }
+];
 
 function emptyDraft() {
   return {
@@ -154,7 +170,7 @@ onMounted(() => Promise.all([reloadGlossary(), reloadProfiles()]));
       <label>源语言<input v-model="draft.sourceLanguage" placeholder="auto" /></label>
       <label>目标语言<input v-model="draft.targetLanguage" placeholder="zh-CN" /></label>
       <label>领域<input v-model="draft.domain" placeholder="可选" /></label>
-      <label>匹配方式<select v-model="draft.matchMode"><option value="word">完整单词</option><option value="exact">精确文本</option><option value="phrase">短语</option></select></label>
+      <label>匹配方式<UiSelect :model-value="draft.matchMode" :options="matchModeOptions" label="匹配方式" @update:model-value="draft.matchMode = $event as GlossaryEntry['matchMode']" /></label>
       <label class="wide-field">备注<input v-model="draft.note" placeholder="可选说明" /></label>
     </div>
     <div class="settings-actions">
@@ -191,8 +207,8 @@ onMounted(() => Promise.all([reloadGlossary(), reloadProfiles()]));
     <div v-if="profileDraft" class="profile-editor compact-editor">
       <div class="compact-form-grid">
         <label>名称<input v-model="profileDraft.name" /></label>
-        <label>目标语言<select v-model="profileDraft.targetLanguage"><option value="auto">自动</option><option value="zh-CN">中文</option><option value="en">英文</option></select></label>
-        <label>词典模式<select v-model="profileDraft.dictionaryMode"><option value="off">关闭</option><option value="basic">基础</option><option value="contextual">上下文</option></select></label>
+        <label>目标语言<UiSelect :model-value="profileDraft.targetLanguage" :options="profileLanguageOptions" label="目标语言" @update:model-value="profileDraft!.targetLanguage = $event as TranslationProfile['targetLanguage']" /></label>
+        <label>词典模式<UiSelect :model-value="profileDraft.dictionaryMode" :options="dictionaryModeOptions" label="词典模式" @update:model-value="profileDraft!.dictionaryMode = $event as TranslationProfile['dictionaryMode']" /></label>
         <label>指定模型<input v-model="profileDraft.modelId" placeholder="留空使用全局模型" /></label>
       </div>
       <label class="wide-field">系统提示词<textarea v-model="profileDraft.systemPrompt" /></label>

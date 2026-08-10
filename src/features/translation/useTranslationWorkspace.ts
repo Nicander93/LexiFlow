@@ -1,9 +1,10 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import type { DictionaryLookupResult, NamingOptions, SegmentRevision, TargetLanguage, TranslationMode, TranslationProfile, TranslationSegment } from "../../../electron/shared/types";
-import { pickTargetDictionaryQuery, shouldLookupDictionary } from "../../../electron/shared/dictionary-eligibility";
+import type { DictionaryLookupResult, NamingOptions, TargetLanguage, TranslationMode, TranslationProfile, TranslationSegment } from "../../../electron/shared/types";
+import { shouldLookupDictionary } from "../../../electron/shared/dictionary-eligibility";
 import { useCopyFeedback } from "../useCopyFeedback";
 import { useDictionary } from "../dictionary/useDictionary";
 import { useOcrCapture } from "../ocr/useOcrCapture";
+import { useWorkbenchUi } from "../workbench/useWorkbenchUi";
 import { useSegmentRevision } from "./useSegmentRevision";
 import { useTranslation } from "./useTranslation";
 import { getTranslatorApi } from "../../platform/translator";
@@ -13,11 +14,13 @@ type ResultView = "dictionary" | "translation";
 /** Page-level workflow coordinator; the page itself remains a layout/composition shell. */
 export function useTranslationWorkspace() {
   const sourceText = ref("");
+  const { workbenchMode, setMode: setWorkbenchMode } = useWorkbenchUi();
   const mode = ref<TranslationMode>("normal");
   const namingOptions = ref<NamingOptions>({ type: "variable", style: "camelCase", language: "general" });
-  const targetLanguage = ref<TargetLanguage>("auto");
+  const targetLanguage = ref<TargetLanguage>("zh-CN");
   const { copied, markCopied } = useCopyFeedback();
   const translator = getTranslatorApi();
+  let ocrTranslatePending = false;
   const maxInputLength = ref(10_000);
   const providerLabel = ref("本地模型");
   const profiles = ref<TranslationProfile[]>([]);
@@ -95,18 +98,23 @@ export function useTranslationWorkspace() {
     ocrImage,
     ocrSelectionStyle,
     selectingOcr,
-    ocrEditedText,
     captureOcr,
-    useOcrBlock,
-    applyOcrEditedText,
-    copyOcrText,
     beginOcrSelection,
     moveOcrSelection,
     endOcrSelection,
     cancelOcrSelection,
     setOcrImage,
     resetOcr
-  } = useOcrCapture({ sourceText, onCopied: markCopied });
+  } = useOcrCapture({
+    sourceText,
+    onRecognized: (text) => {
+      if (!text.trim() || ocrTranslatePending) return;
+      ocrTranslatePending = true;
+      sourceText.value = text;
+      resetOcr();
+      void triggerAiTranslate().finally(() => { ocrTranslatePending = false; });
+    }
+  });
 
   const activeSegmentId = computed(() => lockedSegmentId.value ?? hoveredSegmentId.value);
   const hasStructuredResult = computed(() => Boolean(result.value?.segments.length) && (status.value === "success" || status.value === "streaming"));
@@ -115,7 +123,6 @@ export function useTranslationWorkspace() {
   const dictionaryEligible = computed(() => shouldLookupDictionary(sourceText.value));
   const showDictionaryPane = computed(() => dictionaryEligible.value && dictionaryStatus.value === "found" && Boolean(autoDictionaryResult.value?.entry));
   const showDictionaryTab = computed(() => dictionaryEligible.value);
-  const primaryActionLabel = computed(() => (showDictionaryPane.value && resultView.value === "dictionary" ? "AI 翻译" : "开始翻译"));
   const showRevisionPopover = computed(() => Boolean(lockedSegment.value && hasStructuredResult.value));
   const showMainDictionary = computed(() => showDictionaryPane.value && resultView.value === "dictionary");
   const dictionarySuggestions = computed(() => autoDictionaryResult.value?.suggestions ?? []);
@@ -151,10 +158,23 @@ export function useTranslationWorkspace() {
     else if (resultView.value === "dictionary") resultView.value = "translation";
   });
 
-  watch(status, (value) => {
-    if (value !== "success") return;
-    const query = pickTargetDictionaryQuery(displaySegments.value, displayResultText.value);
-    if (query) void lookupDictionary(query);
+  watch(mode, (value) => {
+    setWorkbenchMode(value === "naming" ? "naming" : "normal");
+  }, { immediate: true });
+
+  watch(workbenchMode, (value) => {
+    if (value === "naming" && mode.value !== "naming") {
+      mode.value = "naming";
+      profileId.value = "general";
+    } else if (value === "normal" && mode.value === "naming") {
+      mode.value = "normal";
+    }
+  });
+
+  watch(result, (value) => {
+    if (!value?.sourceText) return;
+    lastTranslatedSource.value = value.sourceText;
+    if (value.sourceText !== sourceText.value) sourceText.value = value.sourceText;
   });
 
   function undoCleanupAndRetranslate(): void {
@@ -276,6 +296,11 @@ export function useTranslationWorkspace() {
   async function copyResult(): Promise<void> { if (resultText.value) { await translator.clipboard.writeText(displayResultText.value); markCopied(); } }
   async function copySource(): Promise<void> { if (sourceText.value) { await translator.clipboard.writeText(sourceText.value); markCopied(); } }
   async function copyBilingual(): Promise<void> { if (sourceText.value && displayResultText.value) { await translator.clipboard.writeText(`原文：${sourceText.value}\n\n译文：${displayResultText.value}`); markCopied(); } }
+  async function copyNamingCandidate(name: string): Promise<void> {
+    if (!name.trim()) return;
+    await translator.clipboard.writeText(name);
+    markCopied();
+  }
 
   onMounted(async () => {
     void nextTick(resizeSourceTextarea);
@@ -318,10 +343,10 @@ export function useTranslationWorkspace() {
   return {
     PROFILE_SHORTCUTS, sourceText, mode, namingOptions, targetLanguage, profiles, profileId, providerLabel, selectProfileShortcut, onProfileChange,
     maxInputLength, showOriginalText, cleanupNotice, undoCleanupAndRetranslate, isRunning, triggerAiTranslate,
-    resultView, showDictionaryTab, showMainDictionary, switchResultView, autoDictionaryResult, dictionaryStatus, dictionaryEligible, dictionarySuggestions, primaryActionLabel,
-    status, displayResultText, result, errorMessage, warningMessage, displaySegments, activeSegmentId, copied, copyResult, copySource, copyBilingual, stop, retry,
+    resultView, showDictionaryTab, showMainDictionary, switchResultView, autoDictionaryResult, dictionaryStatus, dictionaryEligible, dictionarySuggestions,
+    status, displayResultText, result, errorMessage, warningMessage, displaySegments, activeSegmentId, copied, copyResult, copySource, copyBilingual, copyNamingCandidate, stop, retry,
     handleSegmentHover, toggleSegment, clearSegmentLock, navigateSegment, lookupDictionary,
-    ocrResult, ocrError, ocrLoading, captureOcr, copyOcrText, closeOcr, ocrImage, ocrSelectionStyle, selectingOcr, beginOcrSelection, moveOcrSelection, endOcrSelection, cancelOcrSelection, setOcrImage, useOcrBlock, ocrEditedText, applyOcrEditedText,
+    ocrResult, ocrError, ocrLoading, captureOcr, closeOcr, ocrImage, ocrSelectionStyle, selectingOcr, beginOcrSelection, moveOcrSelection, endOcrSelection, cancelOcrSelection, setOcrImage,
     dictionaryTerm, dictionaryCard, dictionaryLoading, dictionaryError, segmentDictionary, closeDictionary, dictionaryContext, dictionaryContextLoading, dictionaryContextText, dictionaryContextError, glossaryFromDictionary, glossaryFromDictionaryNotice, addDictionaryTermToGlossary,
     showRevisionPopover, alternativesLoading, requestAlternatives, addActiveSegmentToGlossary, revisions, lockedSegment, undoRevision, customRevisionInstruction, revisionStatus, reviseSegment, reviseWithCustomInstruction, alternatives, applyAlternative, revisionError, revisionNotice,
     glossaryValidation, sourceTextarea, cleanupDismissed

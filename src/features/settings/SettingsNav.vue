@@ -28,5 +28,6 @@ const items: Array<{ id: SettingsCategory; label: string; icon: "settings" | "ke
       <AppIcon :name="item.icon" :size="14" />
       <span>{{ item.label }}</span>
     </button>
+    <a class="settings-about-link" href="#/about"><AppIcon name="info" :size="14" /><span>关于 LexiFlow</span></a>
   </nav>
 </template>

@@ -36,6 +36,6 @@ function speak(lang: "en-GB" | "en-US"): void {
       <DictionaryLabels :labels="entry.labels" />
       <WordForms :forms="entry.forms" compact />
     </div>
-    <button class="secondary-button" type="button" @click="emit('aiTranslate')">AI 翻译</button>
+    <button class="secondary-button" type="button" @click="emit('aiTranslate')">按文本翻译</button>
   </article>
 </template>

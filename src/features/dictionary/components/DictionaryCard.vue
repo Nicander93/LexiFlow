@@ -9,6 +9,7 @@ import WordForms from "./WordForms.vue";
 
 const props = defineProps<{
   entry: DictionaryEntry;
+  hideAiAction?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -60,8 +61,8 @@ function speak(lang: "en-GB" | "en-US"): void {
       <p v-if="entry.labels.bncRank">BNC：{{ entry.labels.bncRank }}</p>
       <p v-if="entry.labels.contemporaryRank">当代词频：{{ entry.labels.contemporaryRank }}</p>
     </details>
-    <div class="dictionary-card-actions">
-      <button class="text-button" type="button" @click="emit('aiTranslate')">AI 解释（可选）⌄</button>
+    <div v-if="!hideAiAction" class="dictionary-card-actions">
+      <button class="text-button" type="button" @click="emit('aiTranslate')">按文本翻译</button>
     </div>
   </article>
 </template>

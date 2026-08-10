@@ -28,6 +28,7 @@ export function usePopupWorkflow() {
   const hoveredSegmentId = ref<string>();
   const lockedSegmentId = ref<string>();
   let payloadSequence = 0;
+  let lastAdaptedKey = "";
 
   function syncProfileForMode(nextMode: TranslationMode, preferredProfileId?: string): void {
     if (nextMode === "naming") return;
@@ -38,9 +39,15 @@ export function usePopupWorkflow() {
     profileId.value = nextMode === "technical" ? (defaultTranslationProfileId.value || "technical") : "general";
   }
 
-  function adaptHeightForView(view: PopupView): void {
-    const kind = view === "dictionary" ? "dictionary" : view === "naming" ? "naming" : "translation";
-    void nextTick(() => translator.window.adaptPopupHeight(kind, popupShell.value?.scrollHeight));
+  function adaptHeightForView(view: PopupView, force = false): void {
+    const kind = view === "dictionary" ? "dictionary" : view === "naming" ? "naming" : status.value === "loading" || capturing.value ? "default" : "translation";
+    const key = `${kind}:${view}:${status.value}:${capturing.value ? 1 : 0}`;
+    if (!force && key === lastAdaptedKey) return;
+    lastAdaptedKey = key;
+    void nextTick(() => {
+      const contentHeight = popupShell.value?.scrollHeight;
+      translator.window.adaptPopupHeight(kind, contentHeight);
+    });
   }
 
   const namingResult = computed<NamingResult | null>(() => {
@@ -68,7 +75,7 @@ export function usePopupWorkflow() {
 
   async function selectView(view: PopupView): Promise<void> {
     popupView.value = view;
-    adaptHeightForView(view);
+    adaptHeightForView(view, true);
     if (view === "dictionary") return;
     mode.value = view;
     syncProfileForMode(view);
@@ -86,6 +93,7 @@ export function usePopupWorkflow() {
       resetDictionary();
       popupView.value = preferredMode;
       mode.value = preferredMode;
+      adaptHeightForView(preferredMode, true);
       await run();
       return;
     }
@@ -93,10 +101,12 @@ export function usePopupWorkflow() {
     if (sequence !== payloadSequence) return;
     if (dictionaryStatus.value === "found" && dictionaryResult.value?.entry) {
       popupView.value = "dictionary";
+      adaptHeightForView("dictionary", true);
       return;
     }
     popupView.value = preferredMode;
     mode.value = preferredMode;
+    adaptHeightForView(preferredMode, true);
     await run();
   }
 
@@ -108,19 +118,11 @@ export function usePopupWorkflow() {
 
   function close(): void { stop(); translator.window.closePopup(); }
   function togglePin(): void { pinned.value = !pinned.value; translator.window.pinPopup(pinned.value); }
-  function openMain(): void { translator.window.openMain(mode.value === "naming" ? "/naming" : "/"); }
+  function openMain(): void {
+    translator.window.openMain(mode.value === "naming" ? "/?mode=naming" : "/");
+  }
   function handleKeydown(event: KeyboardEvent): void { if (event.key === "Escape") close(); }
 
-  let resizeObserver: ResizeObserver | undefined;
-  let resizeTimer: ReturnType<typeof setTimeout> | undefined;
-  function scheduleHeightAdaptation(): void {
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      resizeTimer = undefined;
-      adaptHeightForView(popupView.value);
-    }, 150);
-  }
-  watch([status, sourceExpanded, popupView, () => result.value?.segments.length], scheduleHeightAdaptation);
   function handleSegmentHover(id: string | undefined): void { if (!lockedSegmentId.value) hoveredSegmentId.value = id; }
   function toggleSegment(id: string): void { lockedSegmentId.value = lockedSegmentId.value === id ? undefined : id; hoveredSegmentId.value = undefined; }
   function clearSegmentLock(): void { lockedSegmentId.value = undefined; hoveredSegmentId.value = undefined; }
@@ -129,10 +131,6 @@ export function usePopupWorkflow() {
   let removePayloadListener: (() => void) | undefined;
   onMounted(() => {
     document.addEventListener("keydown", handleKeydown);
-    if (popupShell.value) {
-      resizeObserver = new ResizeObserver(scheduleHeightAdaptation);
-      resizeObserver.observe(popupShell.value);
-    }
     void translator.settings.get().then((settings) => {
       defaultTranslationProfileId.value = settings.shortcuts.defaultTranslationProfileId || "technical";
       profileId.value = defaultTranslationProfileId.value;
@@ -151,17 +149,22 @@ export function usePopupWorkflow() {
       captureError.value = payload.error ?? "";
       hoveredSegmentId.value = undefined;
       lockedSegmentId.value = undefined;
+      lastAdaptedKey = "";
+      adaptHeightForView(popupView.value, true);
       if (payload.text) {
         capturing.value = false;
         void handlePayloadText(payload.text, payload.mode, sequence);
       }
     });
   });
+
+  watch(status, (value) => {
+    if (value === "success" || value === "error" || value === "loading") adaptHeightForView(popupView.value, true);
+  });
+
   onUnmounted(() => {
     document.removeEventListener("keydown", handleKeydown);
     removePayloadListener?.();
-    resizeObserver?.disconnect();
-    if (resizeTimer) clearTimeout(resizeTimer);
   });
 
   return {

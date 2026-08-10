@@ -49,7 +49,7 @@ export class DictionaryService {
     if (!status.available) {
       return {
         ...empty,
-        unavailableReason: status.message ?? "本地词典资源不可用，仍可使用 AI 翻译。"
+        unavailableReason: status.message ?? "本地词典资源不可用，仍可按文本翻译。"
       };
     }
 
@@ -130,7 +130,7 @@ export class DictionaryService {
     } catch {
       return {
         ...empty,
-        unavailableReason: "词典查询失败，请使用 AI 翻译或重新启动应用。"
+        unavailableReason: "词典查询失败，请按文本翻译或重新启动应用。"
       };
     }
   }

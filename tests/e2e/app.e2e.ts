@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import type { TranslatorApi } from "../../electron/shared/api";
-import { IPC_CHANNELS, type PopupPayload } from "../../electron/shared/types";
+import { IPC_CHANNELS, type CaptureScreenResult, type PopupPayload } from "../../electron/shared/types";
 
 let electronApp: ElectronApplication;
 let mainWindow: Page;
@@ -56,6 +56,9 @@ test.beforeAll(async () => {
       createdAt: "2026-08-08T00:00:00.000Z",
       updatedAt: "2026-08-08T00:00:00.000Z",
       isFavorite: false,
+      kind: "translation",
+      origin: "main",
+      usageCount: 2,
       revisions: [],
       segments: [{ id: "e2e-segment", source: "history source", target: "history result", sourceStart: 0, sourceEnd: 14 }]
     }]
@@ -146,31 +149,50 @@ test("preload contract and primary routes render", async () => {
   );
   expect(runtime).toMatchObject({ apiVersion: 2, platform: "win32" });
   await expect(mainWindow.getByRole("heading", { name: "翻译" })).toBeVisible();
-  await mainWindow.screenshot({ path: resolve(uiVerificationDir, "workbench-empty.png") });
+  await expect(mainWindow.getByPlaceholder("输入或粘贴文本")).toBeVisible();
+  await expect(mainWindow.getByRole("button", { name: "更多" })).toHaveCount(0);
+  expect(await mainWindow.getByPlaceholder("输入或粘贴文本").evaluate((element) => getComputedStyle(element).outlineStyle)).toBe("none");
+  await saveUiScreenshot(mainWindow, "workbench-empty.png");
 
-  await mainWindow.getByRole("button", { name: "更多" }).click();
-  await navLink(mainWindow, "#/naming").click();
+  await mainWindow.getByRole("button", { name: /翻译|代码命名/ }).first().click();
+  await mainWindow.getByRole("option", { name: "代码命名" }).click();
   await expect(mainWindow.getByLabel("类型")).toBeVisible();
   await expect(mainWindow.getByLabel("风格")).toBeVisible();
-  await mainWindow.screenshot({ path: resolve(uiVerificationDir, "naming.png") });
+  await saveUiScreenshot(mainWindow, "naming.png");
 
+  await mainWindow.keyboard.press("Escape");
   await navLink(mainWindow, "#/settings").click();
+  await expect.poll(() => new URL(mainWindow.url()).hash).toBe("#/settings");
+  await expect(mainWindow.getByRole("button", { name: "返回翻译" })).toBeVisible();
   await expect(mainWindow.getByRole("heading", { name: "常规" })).toBeVisible();
   await expect(mainWindow.getByRole("button", { name: "模型服务" })).toBeVisible();
 });
 
 test("compact window, settings navigation, and shortcut recording", async () => {
+  if (await mainWindow.getByRole("button", { name: "返回翻译" }).count()) {
+    await mainWindow.getByRole("button", { name: "返回翻译" }).click();
+  } else {
+    await mainWindow.evaluate(() => { location.hash = "#/"; });
+  }
+  await expect(mainWindow.getByPlaceholder("输入或粘贴文本")).toBeVisible();
   const browserWindow = await electronApp.browserWindow(mainWindow);
   const bounds = await browserWindow.evaluate((window) => window.getContentBounds());
-  // Native Windows frame/DPI reduces content bounds slightly; VNext targets a compact 900x620 workbench.
-  expect(bounds.width).toBeGreaterThanOrEqual(880);
-  // Windows title-bar overlays can add a 1px frame on each side.
-  expect(bounds.width).toBeLessThanOrEqual(910);
-  expect(bounds.height).toBeGreaterThanOrEqual(540);
-  expect(bounds.height).toBeLessThanOrEqual(630);
+  // Native Windows frame/DPI reduces content bounds slightly; VNext targets 760x540.
+  expect(bounds.width).toBeGreaterThanOrEqual(740);
+  expect(bounds.width).toBeLessThanOrEqual(780);
+  expect(bounds.height).toBeGreaterThanOrEqual(500);
+  expect(bounds.height).toBeLessThanOrEqual(560);
   await navLink(mainWindow, "#/settings").click();
   await expect(mainWindow.getByRole("heading", { name: "常规", exact: true, level: 1 })).toBeVisible();
-  await mainWindow.screenshot({ path: resolve(uiVerificationDir, "settings.png"), fullPage: true });
+  await saveUiScreenshot(mainWindow, "settings.png", true);
+  await expect(mainWindow.locator("select")).toHaveCount(0);
+  const closeAction = mainWindow.getByRole("combobox", { name: "关闭主窗口时" });
+  await closeAction.click();
+  await expect(mainWindow.getByRole("listbox", { name: "关闭主窗口时" })).toBeVisible();
+  await expect(mainWindow.getByRole("option", { name: "隐藏到托盘" })).toHaveAttribute("aria-selected", "true");
+  await mainWindow.waitForTimeout(180);
+  await saveUiScreenshot(mainWindow, "settings-select-open.png", true);
+  await mainWindow.keyboard.press("Escape");
   for (const category of ["常规", "划词与快捷键", "翻译", "模型服务", "高级"]) {
     await mainWindow.getByRole("button", { name: category, exact: true }).click();
     await expect(mainWindow.getByRole("heading", { name: category, exact: true, level: 1 })).toBeVisible();
@@ -184,21 +206,23 @@ test("compact window, settings navigation, and shortcut recording", async () => 
   await expect(recorder).not.toContainText("请按下快捷键");
   await mainWindow.getByRole("button", { name: "常规", exact: true }).click();
   await expect(mainWindow.getByLabel("界面字体大小")).toHaveValue("14");
-
+  await mainWindow.getByRole("button", { name: "返回翻译" }).click();
+  await expect(mainWindow.getByPlaceholder("输入或粘贴文本")).toBeVisible();
 });
 
 test("local dictionary lookup shows card without requiring a model", async () => {
-  await navLink(mainWindow, "#/").click();
+  await mainWindow.evaluate(() => { location.hash = "#/"; });
+  await expect(mainWindow.getByPlaceholder("输入或粘贴文本")).toBeVisible();
   const source = mainWindow.locator("textarea").first();
   await source.fill("sorry");
   await expect(mainWindow.getByRole("heading", { name: "sorry" })).toBeVisible({ timeout: 10_000 });
   await expect(mainWindow.getByText(/难过|遗憾|抱歉|对不起/)).toBeVisible();
-  await expect(mainWindow.getByRole("button", { name: /AI 解释（可选）/ }).first()).toBeVisible();
-  await mainWindow.screenshot({ path: resolve(uiVerificationDir, "dictionary.png") });
+  await expect(mainWindow.getByPlaceholder("输入或粘贴文本")).toBeVisible();
+  await saveUiScreenshot(mainWindow, "dictionary.png");
 });
 
 test("translation validation reaches the renderer through IPC", async () => {
-  await navLink(mainWindow, "#/").click();
+  await mainWindow.evaluate(() => { location.hash = "#/"; });
   await sourceClearAndValidate();
 });
 
@@ -385,10 +409,17 @@ test("native OCR smoke recognizes only the selected screen region", async () => 
       return attempts;
     });
     console.info("[native-ocr] desktop sources=", JSON.stringify(captureDiagnostics));
-    const captured = await mainWindow.evaluate(async () => {
-      const api = (globalThis as unknown as Window & { translator?: TranslatorApi }).translator!;
-      return api.ocr.captureScreen();
-    });
+    let captured: CaptureScreenResult;
+    try {
+      captured = await mainWindow.evaluate(async () => {
+        const api = (globalThis as unknown as Window & { translator?: TranslatorApi }).translator!;
+        return api.ocr.captureScreen();
+      });
+    } catch (error) {
+      const hasDesktopFrame = captureDiagnostics.some((attempt) => attempt.sources?.some((source) => !source.empty) === true);
+      if (!hasDesktopFrame) test.skip(true, "The current runner has no interactive desktop frame or screen handle.");
+      throw error;
+    }
     const x = Math.max(0, (geometry.contentBounds.x - geometry.displayBounds.x + rect.x - 20) * geometry.scaleFactor / captured.pixelWidth);
     const y = Math.max(0, (geometry.contentBounds.y - geometry.displayBounds.y + rect.y - 20) * geometry.scaleFactor / captured.pixelHeight);
     const right = Math.min(1, (geometry.contentBounds.x - geometry.displayBounds.x + rect.x + rect.width + 20) * geometry.scaleFactor / captured.pixelWidth);
@@ -403,14 +434,19 @@ test("native OCR smoke recognizes only the selected screen region", async () => 
   }
 });
 
-test("history page opens a stored translation session through IPC", async () => {
-  await navLink(mainWindow, "#/history").click();
+test("history overlay restores a stored session without route change", async () => {
+  await mainWindow.evaluate(() => { location.hash = "#/"; });
+  await mainWindow.getByPlaceholder("输入或粘贴文本").fill("keep-me");
+  const hashBefore = new URL(mainWindow.url()).hash;
+  await mainWindow.getByRole("button", { name: "历史记录" }).click();
   await expect(mainWindow.getByRole("heading", { name: "历史" })).toBeVisible();
+  await expect.poll(() => new URL(mainWindow.url()).hash).toBe(hashBefore);
   const item = mainWindow.getByText("history source", { exact: true });
   await expect(item).toBeVisible();
+  await expect(mainWindow.getByText(/主窗口/)).toBeVisible();
   await item.click();
-  await expect.poll(() => new URL(mainWindow.url()).hash).toBe("#/");
-  await expect(mainWindow.getByRole("heading", { name: "history source" })).toBeVisible();
+  await expect(mainWindow.getByRole("heading", { name: "历史" })).toHaveCount(0);
+  await expect(mainWindow.getByPlaceholder("输入或粘贴文本")).toHaveValue("history source");
   const session = await mainWindow.evaluate(() =>
     (window as Window & { translator?: TranslatorApi }).translator?.translation.getSession()
   );
@@ -425,7 +461,8 @@ test("clearing local data removes the seeded history", async () => {
     return (await api.documents.list()).length;
   });
   expect(remainingTasks).toBe(0);
-  await navLink(mainWindow, "#/history").click();
+  await mainWindow.evaluate(() => { location.hash = "#/"; });
+  await mainWindow.getByRole("button", { name: "历史记录" }).click();
   await expect(mainWindow.getByText("完成一次翻译后，记录会留在这里")).toBeVisible();
 });
 
@@ -437,10 +474,23 @@ async function popupPage(): Promise<Page> {
   return popup;
 }
 
+async function saveUiScreenshot(page: Page, fileName: string, fullPage = false): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.screenshot({ path: resolve(uiVerificationDir, fileName), fullPage });
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(160 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 async function sourceClearAndValidate(): Promise<void> {
   if (!(await mainWindow.locator("textarea").count())) {
-    await navLink(mainWindow, "#/settings").click();
-    await navLink(mainWindow, "#/").click();
+    await mainWindow.evaluate(() => { location.hash = "#/"; });
   }
   const source = mainWindow.locator("textarea").first();
   await source.fill("");
@@ -465,9 +515,9 @@ test("configured Ollama model completes a real translation", async () => {
     (window as Window & { translator?: TranslatorApi }).translator?.settings.get()
   ).then((settings) => settings?.provider.model)).toBe(model);
 
-  await navLink(mainWindow, "#/").click();
-  await mainWindow.getByPlaceholder("输入或粘贴文本，Ctrl + Enter 执行").fill("Hello, world.");
+  await mainWindow.getByRole("button", { name: "返回翻译" }).click();
+  await mainWindow.getByPlaceholder("输入或粘贴文本").fill("Hello, world.");
   await mainWindow.getByRole("button", { name: "开始翻译", exact: true }).click();
-  await expect(mainWindow.locator(".result-text")).toBeVisible({ timeout: 100_000 });
-  await expect(mainWindow.locator(".result-text")).not.toHaveText("");
+  await expect(mainWindow.locator(".result-text, .simple-target")).toBeVisible({ timeout: 100_000 });
+  await expect(mainWindow.locator(".result-text, .simple-target")).not.toHaveText("");
 });

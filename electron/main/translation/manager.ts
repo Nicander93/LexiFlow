@@ -197,4 +197,32 @@ export class TranslationManager {
     if (!sender.isDestroyed()) sender.send(IPC_CHANNELS.translationEvent, { requestId: session.id, status: "success", content: history.resultText, result, historyId: history.id });
     return true;
   }
+
+  /** Push the latest interactive session into a renderer (popup → main handoff). */
+  pushActiveSession(sender: WebContents): boolean {
+    const active = this.sessionStore.getActive();
+    if (!active?.sourceText) return false;
+    const status = active.status === "success" || active.status === "streaming" || active.status === "loading" ? active.status : "success";
+    const result = {
+      requestId: active.requestId ?? active.id,
+      sourceText: active.sourceText,
+      originalSourceText: active.sourceText,
+      targetText: active.resultText,
+      sourceLanguage: "",
+      targetLanguage: active.targetLanguage,
+      segments: active.segments ?? [],
+      modelInfo: { provider: "ollama" as const, model: "", durationMs: 0 },
+      createdAt: active.createdAt
+    };
+    if (!sender.isDestroyed()) {
+      sender.send(IPC_CHANNELS.translationEvent, {
+        requestId: result.requestId,
+        status,
+        content: active.resultText,
+        result: status === "success" ? result : undefined,
+        historyId: active.historyId
+      });
+    }
+    return true;
+  }
 }

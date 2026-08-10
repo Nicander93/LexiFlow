@@ -1,10 +1,21 @@
 <script setup lang="ts">
 import type { AppSettings } from "../../../../electron/shared/types";
+import UiSelect from "../../../components/UiSelect.vue";
 import SettingGroup from "../components/SettingGroup.vue";
 import SettingRow from "../components/SettingRow.vue";
 
 defineProps<{ settings: AppSettings }>();
 const emit = defineEmits<{ save: [] }>();
+const closeActionOptions = [
+  { value: "hide", label: "隐藏到托盘" },
+  { value: "quit", label: "退出应用" }
+];
+const retentionOptions = [
+  { value: "7d", label: "7 天" },
+  { value: "30d", label: "30 天" },
+  { value: "forever", label: "永久保存" },
+  { value: "clear-on-exit", label: "退出应用时清除" }
+];
 </script>
 
 <template>
@@ -21,10 +32,12 @@ const emit = defineEmits<{ save: [] }>();
       <label class="ios-switch"><input v-model="settings.startup.enabled" type="checkbox" aria-label="Windows 登录时启动" @change="emit('save')" /><span /></label>
     </SettingRow>
     <SettingRow title="关闭主窗口时">
-      <select v-model="settings.window.closeAction" aria-label="关闭主窗口时" @change="emit('save')">
-        <option value="hide">隐藏到托盘</option>
-        <option value="quit">退出应用</option>
-      </select>
+      <UiSelect
+        :model-value="settings.window.closeAction"
+        :options="closeActionOptions"
+        label="关闭主窗口时"
+        @update:model-value="settings.window.closeAction = $event as AppSettings['window']['closeAction']; emit('save')"
+      />
     </SettingRow>
     <SettingRow title="悬浮窗失焦自动隐藏">
       <label class="ios-switch"><input v-model="settings.window.autoHidePopup" type="checkbox" aria-label="悬浮窗失焦自动隐藏" @change="emit('save')" /><span /></label>
@@ -39,12 +52,12 @@ const emit = defineEmits<{ save: [] }>();
       <input v-model.number="settings.history.maxItems" aria-label="最大历史数量" type="number" min="1" max="10000" @blur="emit('save')" @keydown.enter="($event.target as HTMLInputElement).blur()" />
     </SettingRow>
     <SettingRow title="历史保留周期">
-      <select v-model="settings.history.retention" aria-label="历史保留周期" @change="emit('save')">
-        <option value="7d">7 天</option>
-        <option value="30d">30 天</option>
-        <option value="forever">永久保存</option>
-        <option value="clear-on-exit">退出应用时清除</option>
-      </select>
+      <UiSelect
+        :model-value="settings.history.retention"
+        :options="retentionOptions"
+        label="历史保留周期"
+        @update:model-value="settings.history.retention = $event as AppSettings['history']['retention']; emit('save')"
+      />
     </SettingRow>
   </SettingGroup>
 </template>
