@@ -2,6 +2,7 @@
 import type { TranslationSegment, TranslationStatus } from "../../../../electron/shared/types";
 import AppIcon from "../../../components/AppIcon.vue";
 import SegmentedText from "./SegmentedText.vue";
+import SpeechButton from "../../speech/SpeechButton.vue";
 
 defineProps<{
   status: TranslationStatus;
@@ -13,6 +14,7 @@ defineProps<{
   segments?: TranslationSegment[];
   activeSegmentId?: string;
   copied?: boolean;
+  targetLanguage?: string;
 }>();
 const emit = defineEmits<{
   copy: [];
@@ -33,6 +35,7 @@ const emit = defineEmits<{
     <div class="panel-toolbar">
       <slot name="toolbar-start"><span>译文</span></slot>
       <div class="toolbar-actions">
+        <SpeechButton v-if="text" :text="text" :language="targetLanguage" icon-only label="朗读译文" />
         <button v-if="status === 'loading' || status === 'streaming'" class="icon-button" title="停止" @click="emit('stop')"><AppIcon name="stop" :size="17" /></button>
         <button v-if="status === 'error' || status === 'cancelled'" class="icon-button" title="重试" @click="emit('retry')"><AppIcon name="refresh" :size="17" /></button>
         <div class="copy-actions">

@@ -10,4 +10,9 @@
 
 ## 最近完成
 
+- [语音、单词本与桌面入口完善](completed/voice-vocabulary-shortcuts.md)：补齐朗读、生词管理、划词提示和后台快捷键体验。
 - [UI/UX VNext Round 2](completed/uiux-vnext-round2.md)：工作台、History、OCR、Popup、设置控件与视觉一致性重构。
+
+## 当前活动
+
+- [代码与架构重构](active/architecture-refactor.md)：等待 Windows 目标环境人工验收。

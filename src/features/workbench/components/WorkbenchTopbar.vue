@@ -54,6 +54,7 @@ function changeMode(mode: "normal" | "naming"): void {
       </button>
       <button class="topbar-icon" type="button" title="OCR 截图" aria-label="OCR 截图" @click="requestOcr"><span class="capture-icon" /></button>
       <button class="topbar-icon" type="button" title="历史记录" aria-label="历史记录" @click="emit('history')"><AppIcon name="history" :size="17" /></button>
+      <a class="topbar-icon" href="#/vocabulary" title="单词本" aria-label="单词本"><AppIcon name="book" :size="17" /></a>
       <a class="topbar-icon" href="#/documents" title="文档翻译" aria-label="文档翻译"><AppIcon name="document" :size="17" /></a>
       <a class="topbar-icon" href="#/settings" title="设置" aria-label="设置"><AppIcon name="settings" :size="17" /></a>
     </nav>

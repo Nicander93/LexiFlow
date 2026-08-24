@@ -2,10 +2,13 @@
 import AppIcon from "../../../components/AppIcon.vue";
 import type { TranslationSegment } from "../../../../electron/shared/types";
 import SegmentedText from "./SegmentedText.vue";
+import SpeechButton from "../../speech/SpeechButton.vue";
 
 defineProps<{
   segments: TranslationSegment[];
   activeSegmentId?: string;
+  sourceLanguage?: string;
+  targetLanguage?: string;
 }>();
 
 const emit = defineEmits<{
@@ -22,7 +25,7 @@ const emit = defineEmits<{
 <template>
   <section class="bilingual-reading">
     <div>
-      <header>原文 <button type="button" @click="emit('copy-source')"><AppIcon name="copy" :size="14" /></button></header>
+      <header><span>原文</span><span><SpeechButton :text="segments.map((item) => item.source).join(' ')" :language="sourceLanguage" icon-only label="朗读原文" /><button type="button" @click="emit('copy-source')"><AppIcon name="copy" :size="14" /></button></span></header>
       <SegmentedText
         side="source"
         :segments="segments"
@@ -34,7 +37,7 @@ const emit = defineEmits<{
       />
     </div>
     <div>
-      <header>译文 <button type="button" @click="emit('copy')"><AppIcon name="copy" :size="14" /></button></header>
+      <header><span>译文</span><span><SpeechButton :text="segments.map((item) => item.target).join(' ')" :language="targetLanguage" icon-only label="朗读译文" /><button type="button" @click="emit('copy')"><AppIcon name="copy" :size="14" /></button></span></header>
       <SegmentedText
         side="target"
         :segments="segments"
@@ -61,6 +64,7 @@ header {
   padding: 0 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px;
 }
 header button { border: 0; color: var(--muted); background: none; cursor: pointer; }
+header > span { display: inline-flex; align-items: center; gap: 3px; }
 @media (max-width: 720px) {
   .bilingual-reading { grid-template-columns: 1fr; }
   .bilingual-reading > div + div { border-left: 0; border-top: 1px solid var(--border); }

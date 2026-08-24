@@ -4,12 +4,20 @@ import UiSelect from "../../../components/UiSelect.vue";
 import SettingGroup from "../components/SettingGroup.vue";
 import SettingRow from "../components/SettingRow.vue";
 import ShortcutRecorder from "../ShortcutRecorder.vue";
+import { DEFAULT_SETTINGS } from "../../../../electron/shared/defaults";
 
 const props = defineProps<{ settings: AppSettings; profiles: TranslationProfile[] }>();
 const emit = defineEmits<{ save: []; error: [message: string] }>();
 
 function commitShortcut(key: "translation" | "naming" | "screenshot", value: string): void {
   props.settings.shortcuts[key] = value;
+  emit("save");
+}
+
+function restoreRecommendedShortcuts(): void {
+  props.settings.shortcuts.translation = DEFAULT_SETTINGS.shortcuts.translation;
+  props.settings.shortcuts.naming = DEFAULT_SETTINGS.shortcuts.naming;
+  props.settings.shortcuts.screenshot = DEFAULT_SETTINGS.shortcuts.screenshot;
   emit("save");
 }
 </script>
@@ -21,7 +29,10 @@ function commitShortcut(key: "translation" | "naming" | "screenshot", value: str
     </SettingRow>
   </SettingGroup>
 
-  <SettingGroup title="全局快捷键" description="点击后直接按下组合键；清空表示停用该快捷键。">
+  <SettingGroup title="全局快捷键" description="LexiFlow 在后台运行时生效。推荐使用三修饰键组合，减少与 VS Code 等开发工具冲突；清空表示停用。">
+    <SettingRow title="推荐快捷键" description="恢复低冲突的 Ctrl + Alt + Shift 组合">
+      <button type="button" class="secondary-button" @click="restoreRecommendedShortcuts">恢复推荐组合</button>
+    </SettingRow>
     <SettingRow title="暂停全部快捷键">
       <label class="ios-switch"><input v-model="settings.shortcuts.paused" type="checkbox" aria-label="暂停全部快捷键" @change="emit('save')" /><span /></label>
     </SettingRow>

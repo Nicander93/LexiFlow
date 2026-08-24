@@ -9,6 +9,7 @@ import type { TranslationManager } from "../../translation/manager";
 import type { TranslationSessionStore } from "../../translation/session-store";
 import type { WindowsOcrService } from "../../ocr/windows-ocr";
 import type { WindowManager } from "../../window/manager";
+import type { VocabularyService } from "../../application/vocabulary/vocabulary-service";
 
 export interface IpcDependencies {
   settingsUseCases: SettingsUseCases;
@@ -16,6 +17,7 @@ export interface IpcDependencies {
   historyService: HistoryService;
   dictionaryService: DictionaryService;
   glossaryService: GlossaryService;
+  vocabularyService: VocabularyService;
   profileService: ProfileService;
   documentManager: DocumentManager;
   ocrService: WindowsOcrService;

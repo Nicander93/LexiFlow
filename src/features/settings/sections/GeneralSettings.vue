@@ -28,7 +28,7 @@ const retentionOptions = [
         <button type="button" aria-label="增大字体" :disabled="settings.window.fontSize >= 24" @click="settings.window.fontSize = Math.min(24, settings.window.fontSize + 1); emit('save')">+</button>
       </div>
     </SettingRow>
-    <SettingRow title="Windows 登录时启动">
+    <SettingRow title="Windows 登录时启动" description="建议开启：应用会在后台注册全局快捷键，不需要先打开主窗口。完全退出应用后，Windows 不会再把快捷键事件发送给 LexiFlow。">
       <label class="ios-switch"><input v-model="settings.startup.enabled" type="checkbox" aria-label="Windows 登录时启动" @change="emit('save')" /><span /></label>
     </SettingRow>
     <SettingRow title="关闭主窗口时">

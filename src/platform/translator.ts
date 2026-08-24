@@ -1,6 +1,6 @@
 import type { TranslatorApi } from "../../electron/shared/api";
 import { DEFAULT_SETTINGS } from "../../electron/shared/defaults";
-import type { DictionaryContextEvent, DocumentTaskRecord, ProviderModel, SegmentAlternativeEvent, SegmentRevisionEvent, TranslationEvent, TranslationHistory } from "../../electron/shared/types";
+import type { DictionaryContextEvent, DocumentTaskRecord, ProviderModel, SegmentAlternativeEvent, SegmentRevisionEvent, TranslationEvent, TranslationHistory, VocabularyEntry } from "../../electron/shared/types";
 import { previewDictionaryLookup } from "./dictionary-preview";
 
 export function getTranslatorApi(): TranslatorApi {
@@ -108,6 +108,18 @@ export function installBrowserPreviewApi(): void {
       translations: {}
     }
   ];
+  const vocabulary: VocabularyEntry[] = [{
+    id: "preview-word-1",
+    term: "observable",
+    translation: "可观察的；可被监测的",
+    phonetic: "əbˈzɜːrvəbl",
+    sourceLanguage: "en",
+    targetLanguage: "zh-CN",
+    context: "Keep the implementation small and observable.",
+    status: "learning",
+    createdAt: Date.now() - 86_400_000,
+    updatedAt: Date.now() - 3_600_000
+  }];
 
   // Browser preview mode is deliberately separate from Electron. It supports
   // visual review without masking a missing preload inside the real app.
@@ -257,6 +269,34 @@ export function installBrowserPreviewApi(): void {
       importCsv: async () => ({ imported: 0, skipped: [] }),
       exportCsv: async () => ({ saved: false, count: 0 })
     },
+    vocabulary: {
+      list: async () => structuredClone(vocabulary),
+      upsert: async (input) => {
+        const now = Date.now();
+        const index = input.id ? vocabulary.findIndex((item) => item.id === input.id) : vocabulary.findIndex((item) => item.term.toLowerCase() === input.term.toLowerCase());
+        const existing = index >= 0 ? vocabulary[index] : undefined;
+        const value: VocabularyEntry = {
+          id: existing?.id ?? input.id ?? previewUuid(),
+          term: input.term.trim(),
+          translation: input.translation.trim(),
+          phonetic: input.phonetic,
+          sourceLanguage: input.sourceLanguage,
+          targetLanguage: input.targetLanguage,
+          context: input.context,
+          note: input.note,
+          status: input.status ?? existing?.status ?? "learning",
+          createdAt: existing?.createdAt ?? input.createdAt ?? now,
+          updatedAt: now
+        };
+        if (index >= 0) vocabulary[index] = value; else vocabulary.unshift(value);
+        return structuredClone(value);
+      },
+      delete: async (id) => {
+        const index = vocabulary.findIndex((item) => item.id === id);
+        if (index >= 0) vocabulary.splice(index, 1);
+      },
+      clear: async () => { vocabulary.splice(0); }
+    },
     profiles: {
       list: async () => [],
       upsert: async (profile) => structuredClone(profile),
@@ -275,7 +315,7 @@ export function installBrowserPreviewApi(): void {
       cancel: async () => undefined,
       onEvent: () => () => undefined
     },
-    privacy: { clearLocalData: async () => { history.splice(0); } },
+    privacy: { clearLocalData: async () => { history.splice(0); vocabulary.splice(0); } },
     diagnostics: { exportReport: async () => ({ saved: false }) },
     ocr: {
       listScreens: async () => [],

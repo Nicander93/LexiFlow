@@ -31,7 +31,7 @@
   background: #fff;
   box-shadow: 0 2px 7px rgba(31, 48, 35, .18);
   cursor: pointer;
-  transition: transform .15s ease;
+  transition: transform .15s ease, filter .15s ease;
 }
 .selection-tip:hover {
   transform: scale(1.08);

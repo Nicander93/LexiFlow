@@ -4,14 +4,22 @@ import DictionaryCompactCard from "../features/dictionary/components/DictionaryC
 import AppIcon from "../components/AppIcon.vue";
 import BrandLogo from "../components/BrandLogo.vue";
 import { usePopupWorkflow } from "../features/translation/usePopupWorkflow";
+import SpeechButton from "../features/speech/SpeechButton.vue";
+import type { DictionaryEntry } from "../../electron/shared/types";
+import { useVocabularyBook } from "../features/vocabulary/useVocabularyBook";
 
 const popup = usePopupWorkflow();
+const vocabulary = useVocabularyBook(false);
 const {
   popupView, sourceText, captureError, capturing, pinned, copied, popupShell, status, result, errorMessage,
   warningMessage, isRunning, retry, displayResult, namingResult, activeSegmentId, hasStructuredResult,
   dictionaryResult, run, triggerAiTranslate, copy, close, togglePin, openMain, handleSegmentHover,
   toggleSegment, clearSegmentLock, navigateSegment, stop
 } = popup;
+
+function saveWord(entry: DictionaryEntry): void {
+  void vocabulary.saveDictionaryEntry(entry, sourceText.value);
+}
 </script>
 
 <template>
@@ -32,7 +40,7 @@ const {
     <template v-else>
       <section class="popup-source-vnext"><p>{{ sourceText }}</p></section>
       <section class="popup-result-vnext">
-        <DictionaryCompactCard v-if="popupView === 'dictionary' && dictionaryResult?.entry" :entry="dictionaryResult.entry" @ai-translate="triggerAiTranslate" />
+        <DictionaryCompactCard v-if="popupView === 'dictionary' && dictionaryResult?.entry" :entry="dictionaryResult.entry" @ai-translate="triggerAiTranslate" @save-word="saveWord" />
         <div v-else-if="status === 'loading'" class="popup-state"><span class="soft-loader"><i /><i /><i /></span>正在翻译</div>
         <div v-else-if="status === 'error'" class="popup-error">{{ errorMessage }} <button type="button" @click="retry">重试</button></div>
         <div v-else-if="namingResult" class="popup-candidates">
@@ -52,12 +60,14 @@ const {
         />
         <pre v-else>{{ displayResult }}</pre>
         <p v-if="warningMessage" class="popup-warning">{{ warningMessage }}</p>
+        <p v-if="vocabulary.notice.value" class="popup-vocabulary-notice">{{ vocabulary.notice.value }}</p>
       </section>
     </template>
     <footer class="popup-actions">
       <button type="button" class="open-main" @click="openMain">在主窗口打开 ↗</button>
       <div>
         <button v-if="isRunning" type="button" title="停止" @click="stop"><AppIcon name="stop" :size="15" /></button>
+        <SpeechButton v-if="displayResult && !namingResult" :text="displayResult" :language="result?.targetLanguage" icon-only label="朗读译文" />
         <button type="button" :disabled="!displayResult" title="复制译文" @click="copy()"><AppIcon :name="copied ? 'check' : 'copy'" :size="15" /></button>
       </div>
     </footer>
@@ -101,6 +111,7 @@ const {
 .popup-error { color: var(--danger); }
 .popup-error button { border: 0; color: var(--danger); background: transparent; cursor: pointer; }
 .popup-warning { margin: 9px 0 0; color: var(--warning); font-size: 12px; }
+.popup-vocabulary-notice { margin: 9px 0 0; color: var(--accent-strong); font-size: 12px; }
 .popup-candidates { display: grid; gap: 6px; }
 .popup-candidates button {
   display: grid; gap: 2px; border: 0; border-radius: 8px; padding: 8px 10px; text-align: left;

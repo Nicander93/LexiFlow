@@ -11,6 +11,7 @@ import type {
   SettingsPatch,
   TranslationRequest,
   TranslationProfile
+  ,VocabularyUpsertInput
 } from "../../shared/types";
 
 export class IpcValidationError extends Error {
@@ -229,6 +230,25 @@ export function parseGlossaryEntry(value: unknown): GlossaryEntry {
     enabled: parseBoolean(input.enabled, "术语启用状态"),
     createdAt: parseTimestamp(input.createdAt, "创建时间"),
     updatedAt: parseTimestamp(input.updatedAt, "更新时间")
+  };
+}
+
+export function parseVocabularyUpsertInput(value: unknown): VocabularyUpsertInput {
+  const input = record(value, "生词条目");
+  if (input.status !== undefined && input.status !== "learning" && input.status !== "mastered") {
+    throw new IpcValidationError("生词状态无效。");
+  }
+  return {
+    id: input.id === undefined ? undefined : parseId(input.id, "生词 ID"),
+    term: text(input.term, "生词", 256),
+    translation: text(input.translation, "释义", 4_000),
+    phonetic: input.phonetic === undefined ? undefined : parseString(input.phonetic, "音标", 256),
+    sourceLanguage: text(input.sourceLanguage, "源语言", 32),
+    targetLanguage: text(input.targetLanguage, "目标语言", 32),
+    context: input.context === undefined ? undefined : parseString(input.context, "生词上下文", 10_000),
+    note: input.note === undefined ? undefined : parseString(input.note, "生词笔记", 4_000),
+    status: input.status as VocabularyUpsertInput["status"],
+    createdAt: input.createdAt === undefined ? undefined : parseTimestamp(input.createdAt, "创建时间")
   };
 }
 

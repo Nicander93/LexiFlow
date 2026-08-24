@@ -40,6 +40,8 @@ src/
   components/        跨功能共享 UI
   features/
     dictionary/      词典 UI、查询状态与发音
+    speech/          系统朗读按钮和 Renderer 状态适配
+    vocabulary/      生词保存、单词本状态与管理 UI
     ocr/             OCR 渲染状态
     settings/        设置布局、分类区块、按键录制与保存表单
     translation/     翻译状态、句段与结果 UI
@@ -100,7 +102,7 @@ pnpm exec playwright test
 - 新模型路径是否经过访问校验、调度器、取消和 requestId 过滤。
 - 设置字段是否包含默认值、验证、迁移和清除逻辑。
 - 结构化输出字段是否同步 prompt、验证器、UI、测试和 `PROMPT_VERSION`。
-- 新本地文件是否进入隐私清除和诊断脱敏检查。
+- 新本地文件是否包含 schema 校验，并进入隐私清除和诊断脱敏检查。
 - 删除模块后是否同步移除重复测试、过期文档和无效样式。
 - 提交前至少运行 `pnpm test` 与 `pnpm build`。
 - `pnpm lint` 执行主进程/渲染进程/领域边界检查，`pnpm format:check` 检查源码尾随空格；`pnpm check` 汇总类型、边界、格式、测试和构建。

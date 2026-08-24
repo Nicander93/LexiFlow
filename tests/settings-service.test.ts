@@ -52,7 +52,7 @@ describe("SettingsService 字段级命令", () => {
     const applyStartup = vi.fn();
     const useCases = new SettingsUseCases(store, service, { prune: vi.fn(async () => undefined) } as never, { applyShortcuts, applyStartup });
 
-    await useCases.patch({ type: "update-general", value: { startup: { enabled: true } } });
+    await useCases.patch({ type: "update-general", value: { startup: { enabled: !DEFAULT_SETTINGS.startup.enabled } } });
     expect(applyStartup).toHaveBeenCalledTimes(1);
     expect(applyShortcuts).not.toHaveBeenCalled();
 
@@ -62,5 +62,29 @@ describe("SettingsService 字段级命令", () => {
 
     await useCases.patch({ type: "update-shortcuts", value: { paused: true } });
     expect(applyShortcuts).toHaveBeenCalledTimes(1);
+  });
+
+  it("快捷键注册冲突时不持久化新设置并恢复旧组合", async () => {
+    let value = structuredClone(DEFAULT_SETTINGS);
+    const store: SettingsRepository = {
+      get: () => structuredClone(value),
+      getPublic: () => structuredClone(value),
+      patch: async (command) => {
+        value = applySettingsPatch(value, command);
+        return structuredClone(value);
+      },
+      reset: async () => structuredClone(DEFAULT_SETTINGS)
+    };
+    const service = new SettingsService(store);
+    const applyShortcuts = vi.fn()
+      .mockReturnValueOnce({ translation: false, naming: true, screenshot: true, errors: ["快捷键已被 VS Code 占用。"] })
+      .mockReturnValueOnce({ translation: true, naming: true, screenshot: true, errors: [] });
+    const useCases = new SettingsUseCases(store, service, { prune: vi.fn(async () => undefined) } as never, { applyShortcuts });
+    const before = store.get().shortcuts.translation;
+
+    await expect(useCases.patch({ type: "update-shortcuts", value: { translation: "Ctrl+Shift+Alt+Y" } })).rejects.toThrow("VS Code");
+    expect(store.get().shortcuts.translation).toBe(before);
+    expect(applyShortcuts).toHaveBeenCalledTimes(2);
+    expect(applyShortcuts).toHaveBeenLastCalledWith(expect.objectContaining({ shortcuts: expect.objectContaining({ translation: before }) }));
   });
 });

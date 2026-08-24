@@ -23,6 +23,8 @@ const props = defineProps<{
   activeSegmentId?: string;
   copied: boolean;
   dictionaryNote?: string;
+  sourceLanguage?: string;
+  targetLanguage?: string;
 }>();
 
 const emit = defineEmits<{
@@ -38,6 +40,7 @@ const emit = defineEmits<{
   clear: [];
   navigate: [id: string];
   "select-term": [term: string, segmentId?: string];
+  "save-word": [entry: DictionaryEntry];
 }>();
 
 const showPanelFallback = computed(() => props.resultType === "loading" || props.resultType === "error");
@@ -53,7 +56,7 @@ const showPanelFallback = computed(() => props.resultType === "loading" || props
     <span v-html="emptyHint" />
   </section>
 
-  <DictionaryResult v-else-if="resultType === 'dictionary' && dictionaryEntry" :entry="dictionaryEntry" />
+  <DictionaryResult v-else-if="resultType === 'dictionary' && dictionaryEntry" :entry="dictionaryEntry" @save-word="emit('save-word', $event)" />
 
   <NamingResultView
     v-else-if="resultType === 'naming' && namingResult"
@@ -66,6 +69,8 @@ const showPanelFallback = computed(() => props.resultType === "loading" || props
     v-else-if="resultType === 'bilingual'"
     :segments="segments"
     :active-segment-id="activeSegmentId"
+    :source-language="sourceLanguage"
+    :target-language="targetLanguage"
     @copy-source="emit('copy-source')"
     @copy="emit('copy')"
     @hover="emit('hover', $event)"
@@ -80,6 +85,7 @@ const showPanelFallback = computed(() => props.resultType === "loading" || props
     :text="displayResultText"
     :segments="segments"
     :active-segment-id="activeSegmentId"
+    :target-language="targetLanguage"
     @copy="emit('copy')"
     @retry="emit('retry')"
     @copy-source="emit('copy-source')"
@@ -102,6 +108,7 @@ const showPanelFallback = computed(() => props.resultType === "loading" || props
     :segments="segments"
     :active-segment-id="activeSegmentId"
     :copied="copied"
+    :target-language="targetLanguage"
     @copy="emit('copy')"
     @copy-source="emit('copy-source')"
     @copy-bilingual="emit('copy-bilingual')"

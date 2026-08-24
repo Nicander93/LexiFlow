@@ -239,6 +239,8 @@ export class WindowManager {
       show: false,
       frame: false,
       transparent: true,
+      backgroundColor: "#00000000",
+      hasShadow: false,
       resizable: false,
       alwaysOnTop: true,
       skipTaskbar: true,

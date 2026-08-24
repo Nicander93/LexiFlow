@@ -10,16 +10,37 @@ export interface StoredSettings extends Omit<AppSettings, "provider"> {
 }
 
 const MASKED_KEY = "••••••••";
+const LEGACY_SHORTCUTS = { translation: "Ctrl+Alt+T", naming: "Ctrl+Alt+N", screenshot: "Ctrl+Alt+S" };
 
-function mergeSettings(value?: Partial<StoredSettings>): StoredSettings {
+function usesLegacyShortcutDefaults(value?: Partial<AppSettings["shortcuts"]>): boolean {
+  return Boolean(value
+    && value.translation === LEGACY_SHORTCUTS.translation
+    && value.naming === LEGACY_SHORTCUTS.naming
+    && value.screenshot === LEGACY_SHORTCUTS.screenshot);
+}
+
+function mergeShortcuts(value?: Partial<AppSettings["shortcuts"]>): AppSettings["shortcuts"] {
+  const merged = { ...DEFAULT_SETTINGS.shortcuts, ...value };
+  return usesLegacyShortcutDefaults(value) ? {
+    ...merged,
+    translation: DEFAULT_SETTINGS.shortcuts.translation,
+    naming: DEFAULT_SETTINGS.shortcuts.naming,
+    screenshot: DEFAULT_SETTINGS.shortcuts.screenshot
+  } : merged;
+}
+
+export function mergeSettings(value?: Partial<StoredSettings>): StoredSettings {
+  const migrateLegacyBackgroundBehavior = usesLegacyShortcutDefaults(value?.shortcuts);
   return {
     provider: { ...DEFAULT_SETTINGS.provider, ...value?.provider, apiKey: undefined },
-    shortcuts: { ...DEFAULT_SETTINGS.shortcuts, ...value?.shortcuts },
+    shortcuts: mergeShortcuts(value?.shortcuts),
     translation: { ...DEFAULT_SETTINGS.translation, ...value?.translation },
     history: { ...DEFAULT_SETTINGS.history, ...value?.history },
     routing: { ...DEFAULT_SETTINGS.routing, ...value?.routing },
     window: { ...DEFAULT_SETTINGS.window, ...value?.window },
-    startup: { ...DEFAULT_SETTINGS.startup, ...value?.startup }
+    startup: migrateLegacyBackgroundBehavior
+      ? { ...DEFAULT_SETTINGS.startup, enabled: true }
+      : { ...DEFAULT_SETTINGS.startup, ...value?.startup }
   } as StoredSettings;
 }
 

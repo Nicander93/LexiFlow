@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DictionaryLookupResult, TranslationSegment } from "../../../../electron/shared/types";
+import type { DictionaryEntry, DictionaryLookupResult, TranslationSegment } from "../../../../electron/shared/types";
 import DictionaryCard from "../../dictionary/components/DictionaryCard.vue";
 
 defineProps<{
@@ -22,6 +22,7 @@ const emit = defineEmits<{
   (event: "update:source-term", value: string): void;
   (event: "update:target-term", value: string): void;
   (event: "add-term"): void;
+  (event: "save-word", entry: DictionaryEntry): void;
 }>();
 </script>
 
@@ -30,7 +31,7 @@ const emit = defineEmits<{
     <div class="panel-toolbar"><span>词典 · {{ term }}</span><button class="text-button" @click="emit('close')">关闭</button></div>
     <div v-if="loading" class="state-message muted"><span class="spinner" />正在查询本地词典</div>
     <div v-else-if="lookup?.entry" class="dictionary-content">
-      <DictionaryCard :entry="lookup.entry" @ai-translate="emit('ai-translate')" />
+      <DictionaryCard :entry="lookup.entry" @ai-translate="emit('ai-translate')" @save-word="emit('save-word', $event)" />
       <div v-if="context" class="dictionary-context"><small>当前双语上下文</small><p>{{ context.source }}</p><p>{{ context.target }}</p></div>
       <div v-if="contextLoading || contextText || contextError" class="dictionary-context"><small>模型补充解释</small><p v-if="contextLoading" class="muted">正在补充释义…</p><p v-else-if="contextText">{{ contextText }}</p><p v-else class="error-text">{{ contextError }}</p></div>
       <div class="dictionary-glossary">
