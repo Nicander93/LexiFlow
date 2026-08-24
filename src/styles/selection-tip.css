@@ -1,4 +1,17 @@
+.selection-tip-root,
+.selection-tip-root body,
+.selection-tip-root #app {
+  width: 30px;
+  height: 30px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
 .selection-tip-body {
+  width: 30px;
+  height: 30px;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -6,26 +19,27 @@
 }
 .selection-tip-body::before { display: none; }
 .selection-tip {
-  width: 26px;
-  height: 26px;
-  margin: 1px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin: 0;
   padding: 0;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+  overflow: hidden;
+  border: 1px solid rgba(55, 89, 63, .12);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(31, 48, 35, .18);
   cursor: pointer;
   transition: transform .15s ease;
 }
 .selection-tip:hover {
   transform: scale(1.08);
-  background: transparent;
-  box-shadow: 0 0 0 6px rgba(110, 174, 114, .12);
+  background: #fff;
+  box-shadow: 0 3px 9px rgba(31, 48, 35, .24);
 }
 .selection-tip img {
   display: block;
-  width: 26px;
-  height: 26px;
-  border-radius: 0;
+  width: 22px;
+  height: 22px;
 }

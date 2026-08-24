@@ -13,12 +13,18 @@ function dismiss(): void {
   translator.selection.dismissTip();
 }
 
-onMounted(() => document.body.classList.add("selection-tip-body"));
-onUnmounted(() => document.body.classList.remove("selection-tip-body"));
+onMounted(() => {
+  document.documentElement.classList.add("selection-tip-root");
+  document.body.classList.add("selection-tip-body");
+});
+onUnmounted(() => {
+  document.documentElement.classList.remove("selection-tip-root");
+  document.body.classList.remove("selection-tip-body");
+});
 </script>
 
 <template>
-  <button class="selection-tip" title="翻译选中文字" aria-label="翻译选中文字" @click="translateSelection" @contextmenu.prevent="dismiss">
+  <button class="selection-tip" aria-label="翻译选中文字" @click="translateSelection" @contextmenu.prevent="dismiss">
     <img :src="selectionMarkUrl" alt="" />
   </button>
 </template>

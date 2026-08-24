@@ -28,7 +28,7 @@ export class WindowManager {
     this.isQuitting = value;
   }
 
-  private createWindow(options: Electron.BrowserWindowConstructorOptions): BrowserWindow {
+  private createWindow(options: Electron.BrowserWindowConstructorOptions, useFontScale = true): BrowserWindow {
     const window = new BrowserWindow({
       ...options,
       webPreferences: {
@@ -38,8 +38,10 @@ export class WindowManager {
         sandbox: process.env.LEXIFLOW_E2E !== "1"
       }
     });
-    this.applyFontSize(window);
-    window.webContents.on("did-finish-load", () => this.applyFontSize(window));
+    if (useFontScale) {
+      this.applyFontSize(window);
+      window.webContents.on("did-finish-load", () => this.applyFontSize(window));
+    }
     configureNavigationSecurity(window);
     window.webContents.on("preload-error", (_event, preloadPath, error) => {
       console.error(`Preload failed: ${preloadPath}`, error.message);
@@ -232,8 +234,8 @@ export class WindowManager {
   private async ensureSelectionTipWindow(): Promise<BrowserWindow> {
     if (this.selectionTipWindow && !this.selectionTipWindow.isDestroyed()) return this.selectionTipWindow;
     const window = this.createWindow({
-      width: 28,
-      height: 28,
+      width: 30,
+      height: 30,
       show: false,
       frame: false,
       transparent: true,
@@ -241,7 +243,7 @@ export class WindowManager {
       alwaysOnTop: true,
       skipTaskbar: true,
       title: "LexiFlow selection translation"
-    });
+    }, false);
     this.selectionTipWindow = window;
     window.on("closed", () => {
       this.selectionTipWindow = null;
