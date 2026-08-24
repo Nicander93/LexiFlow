@@ -1,24 +1,19 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import type { DictionaryEntry } from "../../../../electron/shared/types";
-import { canSpeakEnglish, speakEnglish } from "../speech";
+import AppIcon from "../../../components/AppIcon.vue";
+import SpeechButton from "../../speech/SpeechButton.vue";
 import DictionarySenses from "./DictionarySenses.vue";
 import DictionaryLabels from "./DictionaryLabels.vue";
 import WordForms from "./WordForms.vue";
 
-const props = defineProps<{
+defineProps<{
   entry: DictionaryEntry;
 }>();
 
 const emit = defineEmits<{
   aiTranslate: [];
+  saveWord: [entry: DictionaryEntry];
 }>();
-
-const speechAvailable = computed(() => canSpeakEnglish());
-
-function speak(lang: "en-GB" | "en-US"): void {
-  speakEnglish(props.entry.headword, lang);
-}
 </script>
 
 <template>
@@ -26,10 +21,11 @@ function speak(lang: "en-GB" | "en-US"): void {
     <header class="dictionary-card-header">
       <strong>{{ entry.headword }}</strong>
       <span v-if="entry.phonetic" class="dictionary-phonetic">{{ entry.phonetic }}</span>
+      <button class="icon-button" type="button" title="加入生词本" aria-label="加入生词本" @click="emit('saveWord', entry)"><AppIcon name="star" :size="14" /></button>
     </header>
     <div class="dictionary-phonetic-row">
-      <button class="text-button" type="button" :disabled="!speechAvailable" :title="speechAvailable ? '英音' : '当前系统未安装可用的英文语音。'" @click="speak('en-GB')">英音</button>
-      <button class="text-button" type="button" :disabled="!speechAvailable" :title="speechAvailable ? '美音' : '当前系统未安装可用的英文语音。'" @click="speak('en-US')">美音</button>
+      <SpeechButton :text="entry.headword" language="en-GB" label="英音" />
+      <SpeechButton :text="entry.headword" language="en-US" label="美音" />
     </div>
     <div class="dictionary-compact-scroll">
       <DictionarySenses :senses="entry.senses" :limit="4" />

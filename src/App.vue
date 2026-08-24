@@ -15,6 +15,7 @@ const { historyOpen, workbenchMode, openHistory, closeHistory, setMode } = useWo
 const secondaryTitle = computed(() => {
   if (route.path.startsWith("/settings")) return "LexiFlow · 设置";
   if (route.path.startsWith("/documents")) return "LexiFlow · 文档翻译";
+  if (route.path.startsWith("/vocabulary")) return "LexiFlow · 单词本";
   if (route.path.startsWith("/about")) return "LexiFlow · 关于";
   return "LexiFlow";
 });

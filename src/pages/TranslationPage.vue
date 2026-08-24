@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import type { NamingResult } from "../../electron/shared/types";
+import type { DictionaryEntry, NamingResult } from "../../electron/shared/types";
 import DictionaryDrawer from "../features/translation/components/DictionaryDrawer.vue";
 import SegmentActionPopover from "../features/translation/components/SegmentActionPopover.vue";
 import OcrCaptureOverlay from "../features/ocr/OcrCaptureOverlay.vue";
@@ -9,10 +9,12 @@ import WorkbenchComposer from "../features/workbench/components/WorkbenchCompose
 import WorkbenchResultHost from "../features/workbench/components/WorkbenchResultHost.vue";
 import { useWorkbenchResultType } from "../features/workbench/useWorkbenchResultType";
 import { useTranslationWorkspace } from "../features/translation/useTranslationWorkspace";
+import { useVocabularyBook } from "../features/vocabulary/useVocabularyBook";
 
 const workspace = useTranslationWorkspace();
 const route = useRoute();
 const pasteGuard = ref(false);
+const vocabulary = useVocabularyBook(false);
 const {
   sourceText, mode, namingOptions, targetLanguage, maxInputLength,
   showOriginalText, cleanupNotice, cleanupDismissed, undoCleanupAndRetranslate, isRunning, triggerAiTranslate,
@@ -65,6 +67,11 @@ function setMode(value: "normal" | "naming"): void {
 
 function onOcrRequest(): void { void captureOcr(); }
 
+async function saveWord(entry: DictionaryEntry): Promise<void> {
+  const context = lockedSegment.value?.source ?? (sourceText.value.length <= 500 ? sourceText.value : undefined);
+  await vocabulary.saveDictionaryEntry(entry, context);
+}
+
 onMounted(() => {
   if (route.query.mode === "naming") setMode("naming");
   window.addEventListener("lexiflow:ocr", onOcrRequest);
@@ -115,6 +122,8 @@ onUnmounted(() => window.removeEventListener("lexiflow:ocr", onOcrRequest));
       <button type="button" @click="cleanupDismissed = true">关闭</button>
     </div>
     <pre v-if="showOriginalText && result?.originalSourceText" class="original-text">{{ result.originalSourceText }}</pre>
+    <p v-if="vocabulary.notice.value" class="vocabulary-notice" role="status">{{ vocabulary.notice.value }} <a href="#/vocabulary">打开单词本</a></p>
+    <p v-if="vocabulary.error.value" class="error-text" role="alert">{{ vocabulary.error.value }}</p>
 
     <WorkbenchResultHost
       :result-type="resultType"
@@ -131,6 +140,8 @@ onUnmounted(() => window.removeEventListener("lexiflow:ocr", onOcrRequest));
       :active-segment-id="activeSegmentId"
       :copied="copied"
       :dictionary-note="dictionaryNote"
+      :source-language="result?.sourceLanguage"
+      :target-language="result?.targetLanguage ?? (targetLanguage === 'auto' ? undefined : targetLanguage)"
       @copy="copyResult"
       @copy-source="copySource"
       @copy-bilingual="copyBilingual"
@@ -143,6 +154,7 @@ onUnmounted(() => window.removeEventListener("lexiflow:ocr", onOcrRequest));
       @clear="clearSegmentLock"
       @navigate="navigateSegment"
       @select-term="lookupDictionary"
+      @save-word="saveWord"
     />
 
     <DictionaryDrawer
@@ -162,6 +174,7 @@ onUnmounted(() => window.removeEventListener("lexiflow:ocr", onOcrRequest));
       @update:source-term="glossaryFromDictionary.sourceTerm = $event"
       @update:target-term="glossaryFromDictionary.targetTerm = $event"
       @add-term="addDictionaryTermToGlossary"
+      @save-word="saveWord"
     />
     <SegmentActionPopover
       v-if="showRevisionPopover"
@@ -197,4 +210,6 @@ onUnmounted(() => window.removeEventListener("lexiflow:ocr", onOcrRequest));
 .cleanup-notice { display: flex; gap: 8px; flex-wrap: wrap; }
 .cleanup-notice button { border: 0; color: var(--accent-strong); background: none; cursor: pointer; }
 .original-text { max-height: 100px; overflow: auto; padding: 9px; border-radius: 8px; background: var(--surface-soft); }
+.vocabulary-notice { margin: 0 4px; color: var(--accent-strong); font-size: 12px; }
+.vocabulary-notice a { color: inherit; font-weight: 600; }
 </style>

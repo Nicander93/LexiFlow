@@ -8,6 +8,7 @@ import { registerRuntimeIpc } from "./register-runtime-ipc";
 import { registerSettingsIpc } from "./register-settings-ipc";
 import { registerTranslationIpc } from "./register-translation-ipc";
 import { registerWindowIpc } from "./register-window-ipc";
+import { registerVocabularyIpc } from "./register-vocabulary-ipc";
 import type { IpcDependencies } from "./types";
 
 /** Single composition boundary for all domain IPC registrars. */
@@ -18,6 +19,7 @@ export function registerAllIpc(dependencies: IpcDependencies): void {
   registerHistoryIpc(dependencies);
   registerDictionaryIpc(dependencies);
   registerGlossaryIpc(dependencies);
+  registerVocabularyIpc(dependencies);
   registerProfileIpc(dependencies);
   registerDocumentIpc(dependencies);
   registerOcrIpc(dependencies);

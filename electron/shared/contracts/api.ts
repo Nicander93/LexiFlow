@@ -7,6 +7,7 @@ import type { ProviderHealth, ProviderModel, RuntimeInfo, SelectionResult, Short
 import type { SegmentAlternativeEvent, SegmentAlternativeRequest, SegmentRevisionEvent, SegmentRevisionRequest, TranslationEvent, TranslationProfile, TranslationRequest, TranslationSession } from "./translation";
 import type { DocumentExportRequest, DocumentImportRequest, DocumentTaskEvent, DocumentTaskRecord } from "./document";
 import type { HistoryRevisionUpdate, TranslationHistory } from "./history";
+import type { VocabularyEntry, VocabularyUpsertInput } from "./vocabulary";
 
 export interface TranslatorApi {
   runtime: { ping: () => Promise<RuntimeInfo> };
@@ -47,6 +48,12 @@ export interface TranslatorApi {
     conflicts: () => Promise<GlossaryConflict[]>;
     importCsv: () => Promise<GlossaryImportResult>;
     exportCsv: () => Promise<GlossaryExportResult>;
+  };
+  vocabulary: {
+    list: () => Promise<VocabularyEntry[]>;
+    upsert: (entry: VocabularyUpsertInput) => Promise<VocabularyEntry>;
+    delete: (id: string) => Promise<void>;
+    clear: () => Promise<void>;
   };
   profiles: { list: () => Promise<TranslationProfile[]>; upsert: (profile: TranslationProfile) => Promise<TranslationProfile>; delete: (id: string) => Promise<void> };
   documents: {

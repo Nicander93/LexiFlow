@@ -3,11 +3,12 @@ import type { DictionaryEntry } from "../../../../electron/shared/types";
 import DictionaryCard from "./DictionaryCard.vue";
 
 defineProps<{ entry: DictionaryEntry }>();
+const emit = defineEmits<{ saveWord: [entry: DictionaryEntry] }>();
 </script>
 
 <template>
   <section class="dictionary-result">
-    <DictionaryCard :entry="entry" hide-ai-action />
+    <DictionaryCard :entry="entry" hide-ai-action @save-word="emit('saveWord', $event)" />
   </section>
 </template>
 

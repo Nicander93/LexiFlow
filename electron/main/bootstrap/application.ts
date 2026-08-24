@@ -33,6 +33,8 @@ import { createGlobalMouseHook } from "../selection/uiohook-adapter";
 import { DiagnosticsExporter } from "../runtime/diagnostics-exporter";
 import { ElectronGlossaryFilePort } from "../glossary/file-port";
 import { createProvider } from "../provider";
+import { VocabularyStore } from "../storage/vocabulary";
+import { VocabularyService } from "../application/vocabulary/vocabulary-service";
 
 export async function bootstrapApplication(): Promise<void> {
   await app.whenReady();
@@ -45,11 +47,13 @@ export async function bootstrapApplication(): Promise<void> {
   const glossaryStore = new GlossaryStore();
   const profileStore = new ProfileStore();
   const documentStore = new DocumentStore();
+  const vocabularyStore = new VocabularyStore();
   const historyService = new HistoryService(historyStore);
   const glossaryService = new GlossaryService(glossaryStore, new ElectronGlossaryFilePort(), { parse: parseGlossaryCsv, serialize: exportGlossaryCsv });
   const profileService = new ProfileService(profileStore);
   const diagnosticsExporter = new DiagnosticsExporter();
-  await Promise.all([settingsStore.initialize(), historyStore.initialize(), glossaryStore.initialize(), profileStore.initialize(), documentStore.initialize()]);
+  const vocabularyService = new VocabularyService(vocabularyStore);
+  await Promise.all([settingsStore.initialize(), historyStore.initialize(), glossaryStore.initialize(), profileStore.initialize(), documentStore.initialize(), vocabularyStore.initialize()]);
   await dictionaryService.initialize().catch(() => undefined);
   await historyStore.prune(settingsStore.get().history);
 
@@ -170,7 +174,7 @@ export async function bootstrapApplication(): Promise<void> {
   const clearLocalData = async (): Promise<void> => {
     translationManager.cancel();
     await documentManager.cancelAll();
-    await Promise.all([historyStore.clear(), glossaryStore.clear(), profileStore.clear(), documentStore.clear()]);
+    await Promise.all([historyStore.clear(), glossaryStore.clear(), profileStore.clear(), documentStore.clear(), vocabularyStore.clear()]);
     await settingsUseCases.reset();
     documentManager.resumeAccepting();
   };
@@ -197,6 +201,7 @@ export async function bootstrapApplication(): Promise<void> {
     historyService,
     dictionaryService,
     glossaryService,
+    vocabularyService,
     profileService,
     documentManager,
     ocrService,

@@ -11,4 +11,5 @@ export type * from "./contracts/dictionary";
 export type * from "./contracts/history";
 export type * from "./contracts/runtime";
 export type * from "./contracts/window";
+export type * from "./contracts/vocabulary";
 export { IPC_CHANNELS } from "./contracts/channels";

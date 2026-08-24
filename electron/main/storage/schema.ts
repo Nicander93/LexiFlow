@@ -3,6 +3,7 @@ import type { DocumentTasksFile } from "./documents";
 import type { StoredHistory } from "./history-policy";
 import type { ProfilesFile } from "./profiles";
 import type { StoredSettings } from "./settings";
+import type { VocabularyEntry, VocabularyFile } from "../../shared/types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -114,4 +115,24 @@ function isGlossaryEntry(value: unknown): value is GlossaryEntry {
 
 export function isStoredGlossary(value: unknown): value is GlossaryEntry[] {
   return Array.isArray(value) && value.every(isGlossaryEntry);
+}
+
+function isVocabularyEntry(value: unknown): value is VocabularyEntry {
+  if (!isRecord(value)) return false;
+  return typeof value.id === "string"
+    && typeof value.term === "string"
+    && typeof value.translation === "string"
+    && typeof value.sourceLanguage === "string"
+    && typeof value.targetLanguage === "string"
+    && (value.status === "learning" || value.status === "mastered")
+    && typeof value.createdAt === "number"
+    && typeof value.updatedAt === "number"
+    && isOptionalString(value.phonetic)
+    && isOptionalString(value.context)
+    && isOptionalString(value.note);
+}
+
+export function isStoredVocabulary(value: unknown): value is VocabularyFile {
+  return isRecord(value) && value.schemaVersion === 1
+    && Array.isArray(value.entries) && value.entries.every(isVocabularyEntry);
 }

@@ -38,9 +38,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     keepAlive: "5m"
   },
   shortcuts: {
-    translation: "Ctrl+Alt+T",
-    naming: "Ctrl+Alt+N",
-    screenshot: "Ctrl+Alt+S",
+    translation: "Ctrl+Alt+Shift+T",
+    naming: "Ctrl+Alt+Shift+N",
+    screenshot: "Ctrl+Alt+Shift+S",
     paused: false,
     enableSelectionTranslation: true,
     defaultTranslationProfileId: "technical"
@@ -72,6 +72,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     fontSize: 14,
   },
   startup: {
-    enabled: false
+    enabled: true
   }
 };

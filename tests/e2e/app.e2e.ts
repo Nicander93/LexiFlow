@@ -221,6 +221,50 @@ test("local dictionary lookup shows card without requiring a model", async () =>
   await saveUiScreenshot(mainWindow, "dictionary.png");
 });
 
+test("dictionary words can be saved and managed in the vocabulary book", async () => {
+  await mainWindow.evaluate(() => { location.hash = "#/"; });
+  const source = mainWindow.getByPlaceholder("输入或粘贴文本");
+  await source.fill("sorry");
+  await expect(mainWindow.getByRole("heading", { name: "sorry" })).toBeVisible({ timeout: 10_000 });
+  await mainWindow.getByRole("button", { name: "加入生词本" }).click();
+  await expect(mainWindow.getByText("已保存“sorry”。")).toBeVisible();
+  await mainWindow.getByRole("link", { name: "打开单词本" }).click();
+  await expect(mainWindow.getByRole("heading", { name: "单词本" })).toBeVisible();
+  await expect(mainWindow.locator(".vocabulary-card strong").filter({ hasText: "sorry" })).toBeVisible();
+  await expect(mainWindow.locator(".vocabulary-card button[aria-pressed]")).toBeVisible();
+  await mainWindow.getByRole("button", { name: "标记已掌握" }).click();
+  const entries = await mainWindow.evaluate(async () => {
+    const api = (window as Window & { translator?: TranslatorApi }).translator!;
+    return api.vocabulary.list();
+  });
+  expect(entries).toHaveLength(1);
+  expect(entries[0]).toMatchObject({ term: "sorry", status: "mastered" });
+  await saveUiScreenshot(mainWindow, "vocabulary.png", true);
+});
+
+test("selection tip icon fills its transparent 36px hit target without clipping", async () => {
+  await mainWindow.evaluate(() => { location.hash = "#/selection-tip"; });
+  const tip = mainWindow.getByRole("button", { name: "翻译选中文字" });
+  await expect(tip).toBeVisible();
+  const metrics = await tip.evaluate((button) => {
+    const image = button.querySelector("img")!;
+    const buttonStyle = getComputedStyle(button);
+    const imageRect = image.getBoundingClientRect();
+    return {
+      bodyClass: document.body.classList.contains("selection-tip-body"),
+      buttonWidth: button.getBoundingClientRect().width,
+      buttonHeight: button.getBoundingClientRect().height,
+      imageWidth: imageRect.width,
+      imageHeight: imageRect.height,
+      outerWidth: button.getBoundingClientRect().width + Number.parseFloat(buttonStyle.marginLeft) + Number.parseFloat(buttonStyle.marginRight),
+      outerHeight: button.getBoundingClientRect().height + Number.parseFloat(buttonStyle.marginTop) + Number.parseFloat(buttonStyle.marginBottom)
+    };
+  });
+  expect(metrics).toEqual({ bodyClass: true, buttonWidth: 32, buttonHeight: 32, imageWidth: 32, imageHeight: 32, outerWidth: 36, outerHeight: 36 });
+  await mainWindow.evaluate(() => { location.hash = "#/"; });
+  await expect(mainWindow.getByPlaceholder("输入或粘贴文本")).toBeVisible();
+});
+
 test("translation validation reaches the renderer through IPC", async () => {
   await mainWindow.evaluate(() => { location.hash = "#/"; });
   await sourceClearAndValidate();
@@ -288,7 +332,7 @@ test("popup streaming layout does not persist automatic bounds", async () => {
   expect(await readFile(settingsPath, "utf8")).toBe(before);
 });
 
-test("invalid runtime shortcut registration restores the previous group", async () => {
+test("invalid runtime shortcut registration rejects persistence and restores the previous group", async () => {
   await electronApp.evaluate(({ globalShortcut }) => {
     const state = globalThis as typeof globalThis & { __lexiflowOriginalRegister?: typeof globalShortcut.register; __lexiflowRegisterAttempts?: string[] };
     state.__lexiflowOriginalRegister = globalShortcut.register;
@@ -298,19 +342,30 @@ test("invalid runtime shortcut registration restores the previous group", async 
       return accelerator !== "Ctrl+Alt+Y";
     }) as typeof globalShortcut.register;
   });
-  let result: { shortcutResult: Awaited<ReturnType<TranslatorApi["settings"]["patch"]>>["shortcutResult"], previousShortcuts: { translation: string; naming: string; screenshot: string } };
+  let result: { error: string; previousShortcuts: { translation: string; naming: string; screenshot: string }; afterShortcuts: { translation: string; naming: string; screenshot: string } };
   let attempts: string[] = [];
   try {
     result = await mainWindow.evaluate(async () => {
       const api = (window as Window & { translator?: TranslatorApi }).translator!;
       const before = await api.settings.get();
-      const failed = await api.settings.patch({ type: "update-shortcuts", value: { naming: "Ctrl+Alt+Y" } });
+      let error = "";
+      try {
+        await api.settings.patch({ type: "update-shortcuts", value: { naming: "Ctrl+Alt+Y" } });
+      } catch (cause) {
+        error = cause instanceof Error ? cause.message : String(cause);
+      }
+      const after = await api.settings.get();
       return {
-        shortcutResult: failed.shortcutResult,
+        error,
         previousShortcuts: {
           translation: before.shortcuts.translation,
           naming: before.shortcuts.naming,
           screenshot: before.shortcuts.screenshot
+        },
+        afterShortcuts: {
+          translation: after.shortcuts.translation,
+          naming: after.shortcuts.naming,
+          screenshot: after.shortcuts.screenshot
         }
       };
     });
@@ -318,10 +373,6 @@ test("invalid runtime shortcut registration restores the previous group", async 
       const state = globalThis as typeof globalThis & { __lexiflowRegisterAttempts?: string[] };
       return state.__lexiflowRegisterAttempts ?? [];
     });
-    await mainWindow.evaluate(async (naming) => {
-      const api = (globalThis as unknown as Window & { translator?: TranslatorApi }).translator!;
-      await api.settings.patch({ type: "update-shortcuts", value: { naming } });
-    }, result.previousShortcuts.naming);
   } finally {
     await electronApp.evaluate(({ globalShortcut }) => {
       const state = globalThis as typeof globalThis & { __lexiflowOriginalRegister?: typeof globalShortcut.register; __lexiflowRegisterAttempts?: string[] };
@@ -336,15 +387,13 @@ test("invalid runtime shortcut registration restores the previous group", async 
     });
   }
 
-  expect(result.shortcutResult.errors.length).toBeGreaterThan(0);
-  expect(result.shortcutResult.translation).toBe(true);
-  expect(result.shortcutResult.naming).toBe(false);
-  expect(result.shortcutResult.screenshot).toBe(true);
-  expect(attempts.slice(3, 6)).toEqual([
+  expect(result.error).toContain("注册失败");
+  expect(result.afterShortcuts).toEqual(result.previousShortcuts);
+  expect(attempts).toEqual(expect.arrayContaining([
     result.previousShortcuts.translation,
     result.previousShortcuts.naming,
     result.previousShortcuts.screenshot
-  ]);
+  ]));
 });
 
 test("running Windows process registers the configured global shortcuts", async () => {
@@ -453,14 +502,14 @@ test("history overlay restores a stored session without route change", async () 
   expect(session?.historyId).toBe("e2e-history");
 });
 
-test("clearing local data removes the seeded history", async () => {
-  const remainingTasks = await mainWindow.evaluate(async () => {
+test("clearing local data removes history, documents, and vocabulary", async () => {
+  const remaining = await mainWindow.evaluate(async () => {
     const api = (window as Window & { translator?: TranslatorApi }).translator!;
     await api.documents.start("e2e-document-task").catch(() => undefined);
     await api.privacy.clearLocalData();
-    return (await api.documents.list()).length;
+    return { tasks: (await api.documents.list()).length, vocabulary: (await api.vocabulary.list()).length };
   });
-  expect(remainingTasks).toBe(0);
+  expect(remaining).toEqual({ tasks: 0, vocabulary: 0 });
   await mainWindow.evaluate(() => { location.hash = "#/"; });
   await mainWindow.getByRole("button", { name: "历史记录" }).click();
   await expect(mainWindow.getByText("完成一次翻译后，记录会留在这里")).toBeVisible();

@@ -6,9 +6,9 @@
 }
 .selection-tip-body::before { display: none; }
 .selection-tip {
-  width: 26px;
-  height: 26px;
-  margin: 1px;
+  width: 32px;
+  height: 32px;
+  margin: 2px;
   padding: 0;
   overflow: visible;
   border: 0;
@@ -16,16 +16,17 @@
   background: transparent;
   box-shadow: none;
   cursor: pointer;
-  transition: transform .15s ease;
+  transition: transform .15s ease, filter .15s ease;
 }
 .selection-tip:hover {
-  transform: scale(1.08);
+  transform: scale(1.04);
   background: transparent;
-  box-shadow: 0 0 0 6px rgba(110, 174, 114, .12);
+  box-shadow: none;
+  filter: drop-shadow(0 3px 5px rgba(48, 78, 53, .2));
 }
 .selection-tip img {
   display: block;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   border-radius: 0;
 }

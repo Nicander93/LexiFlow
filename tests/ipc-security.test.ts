@@ -5,7 +5,7 @@ vi.mock("electron", () => ({
 }));
 
 import { assertTrustedSender } from "../electron/main/ipc/security";
-import { parseGlossaryEntry, parseHistoryRevisionUpdate, parseOcrRegion, parseSettingsPatch, parseTranslationProfile, parseTranslationRequest } from "../electron/main/ipc/validation";
+import { parseGlossaryEntry, parseHistoryRevisionUpdate, parseOcrRegion, parseSettingsPatch, parseTranslationProfile, parseTranslationRequest, parseVocabularyUpsertInput } from "../electron/main/ipc/validation";
 
 function fakeEvent(url: string, isMainFrame = true): Electron.IpcMainInvokeEvent {
   const frame = { url };
@@ -38,5 +38,7 @@ describe("IPC DTO 运行时校验", () => {
     expect(() => parseGlossaryEntry({ id: "g", sourceTerm: "a" })).toThrow();
     expect(() => parseTranslationProfile({ id: "p", name: "Profile", targetLanguage: "fr" })).toThrow();
     expect(() => parseSettingsPatch({ type: "update-general", value: { translation: { maxInputLength: "huge" } } })).toThrow();
+    expect(() => parseVocabularyUpsertInput({ term: "word", translation: "", sourceLanguage: "en", targetLanguage: "zh-CN" })).toThrow();
+    expect(() => parseVocabularyUpsertInput({ term: "word", translation: "词", sourceLanguage: "en", targetLanguage: "zh-CN", status: "unknown" })).toThrow();
   });
 });

@@ -6,6 +6,7 @@ import PopupPage from "../pages/PopupPage.vue";
 import SelectionTipPage from "../pages/SelectionTipPage.vue";
 import DocumentsPage from "../pages/DocumentsPage.vue";
 import NotFoundPage from "../pages/NotFoundPage.vue";
+import VocabularyPage from "../pages/VocabularyPage.vue";
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -14,6 +15,7 @@ const router = createRouter({
     { path: "/naming", redirect: "/?mode=naming" },
     { path: "/history", redirect: "/" },
     { path: "/documents", component: DocumentsPage, meta: { shell: "secondary" } },
+    { path: "/vocabulary", component: VocabularyPage, meta: { shell: "secondary" } },
     { path: "/settings", component: SettingsPage, meta: { shell: "secondary" } },
     { path: "/about", component: AboutPage, meta: { shell: "secondary" } },
     { path: "/popup", component: PopupPage, meta: { shell: "popup", popup: true } },

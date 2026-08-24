@@ -232,11 +232,13 @@ export class WindowManager {
   private async ensureSelectionTipWindow(): Promise<BrowserWindow> {
     if (this.selectionTipWindow && !this.selectionTipWindow.isDestroyed()) return this.selectionTipWindow;
     const window = this.createWindow({
-      width: 28,
-      height: 28,
+      width: 36,
+      height: 36,
       show: false,
       frame: false,
       transparent: true,
+      backgroundColor: "#00000000",
+      hasShadow: false,
       resizable: false,
       alwaysOnTop: true,
       skipTaskbar: true,

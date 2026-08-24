@@ -2,11 +2,13 @@
 import AppIcon from "../../../components/AppIcon.vue";
 import type { TranslationSegment } from "../../../../electron/shared/types";
 import SegmentedText from "./SegmentedText.vue";
+import SpeechButton from "../../speech/SpeechButton.vue";
 
 defineProps<{
   text: string;
   segments: TranslationSegment[];
   activeSegmentId?: string;
+  targetLanguage?: string;
 }>();
 
 const emit = defineEmits<{
@@ -40,6 +42,7 @@ const emit = defineEmits<{
       <p v-else>{{ text }}</p>
     </div>
     <footer>
+      <SpeechButton :text="text" :language="targetLanguage" label="朗读译文" />
       <button type="button" title="复制译文" @click="emit('copy')"><AppIcon name="copy" :size="15" /> 复制译文</button>
       <button type="button" title="重新翻译" @click="emit('retry')">重新翻译</button>
     </footer>

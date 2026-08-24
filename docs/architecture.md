@@ -38,17 +38,19 @@ electron/main/index.ts
 | `electron/main/document/` | manager facade、导入/导出服务、独立任务队列与分块翻译 worker |
 | `electron/main/dictionary/` | ECDICT 只读查询 |
 | `electron/main/ocr/` | 屏幕捕获、归一化坐标、内存裁剪、Windows OCR 引擎和取消/超时 |
-| `electron/main/storage/` | 设置、历史、术语表、Profile、文档任务和 schema 迁移 |
+| `electron/main/storage/` | 设置、历史、术语表、单词本、Profile、文档任务和 schema 迁移 |
 | `electron/main/provider/` | Ollama / OpenAI-compatible 实现 |
 | `electron/main/ipc/` | 旧注册入口兼容导出、DTO 运行时校验与可信发送方校验 |
 | `electron/main/interfaces/ipc/` | 按领域 IPC registrar 与唯一组合边界 |
 | `electron/shared/contracts/` | 按领域定义 IPC DTO、`TranslatorApi` 与 `IPC_CHANNELS`；`shared/types.ts` / `shared/api.ts` 仅保留兼容导出 |
 | `electron/shared/` | 兼容导出、默认值、翻译状态 reducer 和纯逻辑 |
-| `src/features/` | 渲染侧按功能聚合的状态与 UI |
+| `src/features/` | 渲染侧按功能聚合的状态与 UI，包括共享系统朗读和单词本交互 |
 | `src/pages/` | 路由页面和页面级编排 |
 | `src/platform/` | preload 获取与浏览器预览适配器 |
 
-Renderer 的主产品入口是无固定侧栏的翻译工作台：`MainAppShell` 提供紧凑顶栏，`TranslationPage` 只组合 workbench、translation、dictionary、OCR 与 history feature。词典、短句、长文双语阅读和命名由输入及模式驱动；历史作为右侧 overlay drawer 恢复同一翻译 Session。`/history` 与 `/naming` 仅保留兼容入口并回到工作台，文档、设置和关于仍是独立 route。
+Renderer 的主产品入口是无固定侧栏的翻译工作台：`MainAppShell` 提供紧凑顶栏，`TranslationPage` 只组合 workbench、translation、dictionary、OCR 与 history feature。词典、短句、长文双语阅读和命名由输入及模式驱动；历史作为右侧 overlay drawer 恢复同一翻译 Session。`/history` 与 `/naming` 仅保留兼容入口并回到工作台，单词本、文档、设置和关于是独立 route。
+
+系统朗读使用 Renderer 可用的 Web Speech API，不调用翻译 Provider、不经网络发送文本。`electron/shared/speech.ts` 保存可测试的语言匹配、长文本分段、队列和取消逻辑；各结果组件通过同一个控制器保证同一时刻只朗读一段内容。系统缺少对应语音包时只禁用朗读，不影响翻译和词典查询。
 
 ## 翻译主路径
 
@@ -96,9 +98,10 @@ OCR 先捕获接近物理像素的屏幕图像并返回短期 `captureId`，Rend
 | Profile | `profiles.json`，带 schemaVersion |
 | 文档任务 | `document-tasks.json`，带 schemaVersion |
 | 术语表 | 本地 JSON |
+| 单词本 | `vocabulary.json`，schemaVersion 1 |
 | 词典 | 安装包内只读 SQLite |
 
-诊断导出不得包含原文、译文、文档正文或 API Key。OCR 临时图片在 `finally` 中删除。`JsonStore` 只对 `ENOENT` 使用默认值；损坏 JSON 会被隔离为带时间戳的 `.corrupt.*.json`，权限和 IO 错误继续向上抛出。
+诊断导出不得包含原文、译文、单词本内容、文档正文或 API Key。OCR 临时图片在 `finally` 中删除。`JsonStore` 只对 `ENOENT` 使用默认值；损坏 JSON 会被隔离为带时间戳的 `.corrupt.*.json`，权限和 IO 错误继续向上抛出。
 
 ## 构建契约
 

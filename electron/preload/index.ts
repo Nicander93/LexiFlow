@@ -39,6 +39,8 @@ import {
   type SettingsPatch,
   type SettingsSnapshot
   ,type TranslationProfile
+  ,type VocabularyEntry
+  ,type VocabularyUpsertInput
 } from "../shared/types";
 import type { TranslatorApi } from "../shared/api";
 
@@ -114,6 +116,12 @@ const api = {
     conflicts: (): Promise<GlossaryConflict[]> => ipcRenderer.invoke(IPC_CHANNELS.glossaryConflicts),
     importCsv: (): Promise<GlossaryImportResult> => ipcRenderer.invoke(IPC_CHANNELS.glossaryImportCsv),
     exportCsv: (): Promise<GlossaryExportResult> => ipcRenderer.invoke(IPC_CHANNELS.glossaryExportCsv)
+  },
+  vocabulary: {
+    list: (): Promise<VocabularyEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.vocabularyList),
+    upsert: (entry: VocabularyUpsertInput): Promise<VocabularyEntry> => ipcRenderer.invoke(IPC_CHANNELS.vocabularyUpsert, entry),
+    delete: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.vocabularyDelete, id),
+    clear: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.vocabularyClear)
   },
   profiles: {
     list: (): Promise<TranslationProfile[]> => ipcRenderer.invoke(IPC_CHANNELS.profileList),
