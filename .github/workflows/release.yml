@@ -38,7 +38,22 @@ jobs:
         run: if (Test-Path release) { Remove-Item release -Recurse -Force }
 
       - name: Build installer and portable package
-        run: pnpm run dist:win:all
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          pnpm run dist:win:all 2>&1 | Tee-Object -FilePath artifacts/dist-win.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload packaging diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: LexiFlow-Packaging-Diagnostics
+          path: |
+            artifacts/dist-win.log
+            release/builder-debug.yml
+            release/builder-effective-config.yaml
+          if-no-files-found: ignore
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7
