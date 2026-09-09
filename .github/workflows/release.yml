@@ -9,13 +9,11 @@ on:
       - "v*.*.*"
 
 permissions:
-  actions: read
   contents: write
 
 jobs:
   windows:
     name: Build Windows artifacts
-    if: github.ref_type != 'tag'
     runs-on: windows-latest
 
     steps:
@@ -67,65 +65,30 @@ jobs:
             release/latest.yml
           if-no-files-found: error
 
-  publish:
-    name: Publish GitHub release
-    if: github.ref_type == 'tag'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download Windows artifacts from main
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p release
-
-          run_id=""
-          for _ in {1..30}; do
-            run_id="$(gh run list \
-              --repo "$GITHUB_REPOSITORY" \
-              --workflow Release \
-              --branch main \
-              --json databaseId,status,conclusion \
-              --jq '.[] | select(.status == "completed" and .conclusion == "success") | .databaseId' \
-              | head -n 1)"
-
-            if [ -n "$run_id" ]; then
-              break
-            fi
-
-            sleep 30
-          done
-
-          if [ -z "$run_id" ]; then
-            echo "No successful main Release workflow run found."
-            exit 1
-          fi
-
-          gh run download "$run_id" \
-            --repo "$GITHUB_REPOSITORY" \
-            --name LexiFlow-Windows \
-            --dir release
-
       - name: Publish GitHub release
         if: github.ref_type == 'tag'
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          mapfile -t files < <(find release -type f \( \
-            -name 'LexiFlow-*-Setup.exe' -o \
-            -name 'LexiFlow-*-Portable.exe' -o \
-            -name '*.blockmap' -o \
-            -name 'latest.yml' \
-          \))
+          $files = @(
+            Get-ChildItem -File -ErrorAction SilentlyContinue -Path @(
+              "release/LexiFlow-*-Setup.exe"
+              "release/LexiFlow-*-Portable.exe"
+              "release/*.blockmap"
+              "release/latest.yml"
+            ) | Select-Object -ExpandProperty FullName
+          )
 
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No release files found in downloaded artifact."
-            exit 1
-          fi
+          if ($files.Count -eq 0) {
+            throw "No release files found from the current tag build."
+          }
 
-          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "$GITHUB_REF_NAME"
+          gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --title $env:GITHUB_REF_NAME --generate-notes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
-          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload $env:GITHUB_REF_NAME $files --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
