@@ -76,7 +76,6 @@ jobs:
       - name: Download Windows artifacts from main
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           mkdir -p release
@@ -87,7 +86,6 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --workflow Release \
               --branch main \
-              --commit "$TAG_SHA" \
               --json databaseId,status,conclusion \
               --jq '.[] | select(.status == "completed" and .conclusion == "success") | .databaseId' \
               | head -n 1)"
@@ -100,7 +98,7 @@ jobs:
           done
 
           if [ -z "$run_id" ]; then
-            echo "No successful main Release workflow run found for $TAG_SHA."
+            echo "No successful main Release workflow run found."
             exit 1
           fi
 
