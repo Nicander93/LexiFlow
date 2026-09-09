@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 
-const target = process.argv[2] || "nsis";
+const targets = process.argv.slice(2);
+if (targets.length === 0) targets.push("nsis");
 
 /** 国内默认走 npmmirror，可用环境变量覆盖。 */
 const defaults = {
@@ -18,7 +19,7 @@ for (const [key, value] of Object.entries(defaults)) {
 
 console.log(
   [
-    `[dist-win] target=${target}`,
+    `[dist-win] targets=${targets.join(",")}`,
     `ELECTRON_MIRROR=${process.env.ELECTRON_MIRROR}`,
     `ELECTRON_BUILDER_BINARIES_MIRROR=${process.env.ELECTRON_BUILDER_BINARIES_MIRROR}`
   ].join("\n")
@@ -26,7 +27,7 @@ console.log(
 
 const result = spawnSync(
   "pnpm",
-  ["exec", "electron-builder", "--win", target, "--publish", "never"],
+  ["exec", "electron-builder", "--win", ...targets, "--publish", "never"],
   { stdio: "inherit", env: process.env, shell: true }
 );
 

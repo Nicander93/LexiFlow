@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "test:e2e": "pnpm run build && playwright test",
     "dist:win": "pnpm run build && node scripts/dist-win.mjs nsis",
-    "dist:win:portable": "pnpm run build && node scripts/dist-win.mjs portable"
+    "dist:win:portable": "pnpm run build && node scripts/dist-win.mjs portable",
+    "dist:win:all": "pnpm run build && node scripts/dist-win.mjs nsis portable"
   },
   "dependencies": {
     "@napi-rs/canvas": "0.1.80",

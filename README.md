@@ -61,6 +61,7 @@ Electron 端到端测试与 Windows 打包：
 pnpm test:e2e
 pnpm dist:win
 pnpm dist:win:portable
+pnpm dist:win:all
 ```
 
 安装包输出到 `release/`。本地模型联调需自行安装并启动 Ollama。

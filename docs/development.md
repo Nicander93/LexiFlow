@@ -80,6 +80,7 @@ pnpm test:e2e
 pnpm check
 pnpm dist:win
 pnpm dist:win:portable
+pnpm dist:win:all
 ```
 
 真实 Ollama E2E：

@@ -33,8 +33,7 @@
 
 ## 安装包
 
-- [ ] `pnpm dist:win`
-- [ ] `pnpm dist:win:portable`
+- [ ] `pnpm dist:win:all`
 - [ ] 在干净用户目录验证 NSIS 安装、升级和卸载
 - [ ] Portable 可启动且不依赖开发目录
 - [ ] 词典数据库、图标、main ESM、preload CJS 和原生 `.node` 依赖均已打包
