@@ -169,7 +169,26 @@ export function installBrowserPreviewApi(): void {
                 ]
               })
             : "让实现保持精简，并且便于观察运行状态。";
-          listeners.forEach((listener) => listener({ requestId, status: "success", content }));
+          if (request.mode === "naming") {
+            listeners.forEach((listener) => listener({ requestId, status: "success", content }));
+            return;
+          }
+          listeners.forEach((listener) => listener({
+            requestId,
+            status: "success",
+            content,
+            result: {
+              requestId,
+              sourceText: request.text,
+              originalSourceText: request.text,
+              targetText: content,
+              sourceLanguage: "en",
+              targetLanguage: request.targetLanguage,
+              segments: [{ id: `${requestId}-segment-1`, source: request.text, target: content, sourceStart: 0, sourceEnd: request.text.length }],
+              modelInfo: { provider: "ollama", model: "qwen3.5:9b", durationMs: 450 },
+              createdAt: Date.now()
+            }
+          }));
         }, 450);
         return requestId;
       },

@@ -54,7 +54,7 @@ const emit = defineEmits<{
 
 <style scoped>
 .bilingual-reading {
-  flex: 1; min-height: 260px; display: grid; grid-template-columns: 1fr 1fr;
+  flex: 0 0 auto; min-height: 260px; max-height: min(480px, 56vh); display: grid; grid-template-columns: 1fr 1fr;
   border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface);
 }
 .bilingual-reading > div { min-width: 0; overflow: auto; }

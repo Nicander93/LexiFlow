@@ -16,6 +16,8 @@ const emit = defineEmits<{
 }>();
 
 const segmentElements = ref<HTMLElement[]>([]);
+let suppressNextClick = false;
+let selectionResetTimer: number | undefined;
 
 function setSegmentElement(index: number, element: Element | ComponentPublicInstance | null): void {
   if (element instanceof HTMLElement) segmentElements.value[index] = element;
@@ -29,9 +31,29 @@ function move(index: number, offset: number): void {
   emit("navigate", segment.id);
 }
 
-function reportSelection(segmentId: string): void {
-  const term = window.getSelection()?.toString().trim();
-  if (term && term.length <= 80) emit("selectTerm", term, segmentId);
+function handleSegmentClick(segmentId: string): void {
+  if (suppressNextClick) {
+    suppressNextClick = false;
+    return;
+  }
+  emit("toggle", segmentId);
+}
+
+function reportSelection(event: MouseEvent, segmentId: string): void {
+  const selection = window.getSelection();
+  const element = event.currentTarget;
+  if (!(element instanceof HTMLElement) || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
+
+  const range = selection.getRangeAt(0);
+  if (!element.contains(range.commonAncestorContainer)) return;
+
+  const term = selection.toString().trim();
+  if (!term || term.length > 80) return;
+
+  suppressNextClick = true;
+  window.clearTimeout(selectionResetTimer);
+  selectionResetTimer = window.setTimeout(() => { suppressNextClick = false; }, 0);
+  emit("selectTerm", term, segmentId);
 }
 </script>
 
@@ -47,8 +69,8 @@ function reportSelection(segmentId: string): void {
       tabindex="0"
       @mouseenter="emit('hover', segment.id)"
       @focus="emit('hover', segment.id)"
-      @click.stop="emit('toggle', segment.id)"
-      @mouseup="reportSelection(segment.id)"
+      @click.stop="handleSegmentClick(segment.id)"
+      @mouseup="reportSelection($event, segment.id)"
       @keydown.left.stop.prevent="move(index, -1)"
       @keydown.right.stop.prevent="move(index, 1)"
     >{{ side === 'source' ? segment.source : segment.target }}<template v-if="index < segments.length - 1"><br v-if="segment.boundaryAfter === 'line'" /><span v-else-if="segment.boundaryAfter === 'paragraph' || segment.boundaryAfter === 'block'"><br /><br /></span><span v-else-if="side === 'source' || segment.boundaryAfter === 'sentence'"> </span></template></span>

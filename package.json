@@ -1,6 +1,6 @@
 {
   "name": "lexiflow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "本地优先的 Windows 桌面翻译与编程命名工具",
   "main": "dist-electron/main/index.js",
   "author": "LexiFlow",

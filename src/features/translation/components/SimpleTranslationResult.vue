@@ -50,7 +50,7 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-.simple-translation { flex: 1; min-height: 0; padding: 8px 2px 12px; }
+.simple-translation { flex: 0 0 auto; min-height: 0; padding: 8px 2px 12px; }
 .simple-target { min-height: 72px; padding: 8px 0 14px; }
 .simple-target :deep(.segment-text) { padding: 0; font-size: 16px; font-weight: 600; line-height: 1.7; }
 .simple-target p { margin: 0; font-size: 16px; line-height: 1.7; font-weight: 600; }

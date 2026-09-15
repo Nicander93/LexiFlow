@@ -221,6 +221,39 @@ test("local dictionary lookup shows card without requiring a model", async () =>
   await saveUiScreenshot(mainWindow, "dictionary.png");
 });
 
+test("text selection and segment revision use one contextual panel", async () => {
+  await mainWindow.evaluate(() => { location.hash = "#/"; });
+  await mainWindow.getByRole("button", { name: "历史记录" }).click();
+  await mainWindow.locator(".drawer-item").filter({ hasText: "history source" }).click();
+
+  const segment = mainWindow.getByRole("button", { name: "history result", exact: true });
+  await expect(segment).toBeVisible();
+  await segment.click();
+  await expect(mainWindow.getByText("调整这句话", { exact: true })).toBeVisible();
+
+  await segment.evaluate((element) => {
+    const text = element.firstChild;
+    if (!text) throw new Error("Expected segment text node.");
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, "history".length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  await expect(mainWindow.getByText("词典", { exact: true })).toBeVisible();
+  await expect(mainWindow.getByText("调整这句话", { exact: true })).toHaveCount(0);
+  await saveUiScreenshot(mainWindow, "translation-context-dictionary.png");
+
+  await mainWindow.keyboard.press("Escape");
+  await expect(mainWindow.getByText("词典", { exact: true })).toHaveCount(0);
+  await segment.click();
+  await expect(mainWindow.getByText("调整这句话", { exact: true })).toBeVisible();
+});
+
 test("dictionary words can be saved and managed in the vocabulary book", async () => {
   await mainWindow.evaluate(() => { location.hash = "#/"; });
   const source = mainWindow.getByPlaceholder("输入或粘贴文本");

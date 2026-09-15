@@ -243,12 +243,21 @@ export function useTranslationWorkspace() {
 
   function closeOcr(): void { resetOcr(); }
   function handleSegmentHover(id: string | undefined): void { if (!lockedSegmentId.value) hoveredSegmentId.value = id; }
-  function toggleSegment(id: string): void { lockedSegmentId.value = lockedSegmentId.value === id ? undefined : id; hoveredSegmentId.value = undefined; }
+  function toggleSegment(id: string): void {
+    closeDictionary();
+    lockedSegmentId.value = lockedSegmentId.value === id ? undefined : id;
+    hoveredSegmentId.value = undefined;
+  }
   function clearSegmentLock(): void { lockedSegmentId.value = undefined; hoveredSegmentId.value = undefined; }
-  function navigateSegment(id: string): void { lockedSegmentId.value = id; hoveredSegmentId.value = undefined; }
+  function navigateSegment(id: string): void {
+    closeDictionary();
+    lockedSegmentId.value = id;
+    hoveredSegmentId.value = undefined;
+  }
 
   function closeDictionary(): void {
     translator.dictionary.context.cancel(dictionaryContextRequestId.value);
+    window.getSelection()?.removeAllRanges();
     dictionaryTerm.value = "";
     segmentDictionary.value = null;
     dictionaryError.value = "";
@@ -261,6 +270,8 @@ export function useTranslationWorkspace() {
 
   async function lookupDictionary(term: string, segmentId?: string): Promise<void> {
     translator.dictionary.context.cancel(dictionaryContextRequestId.value);
+    lockedSegmentId.value = undefined;
+    hoveredSegmentId.value = undefined;
     dictionaryTerm.value = term;
     dictionarySegmentId.value = segmentId;
     segmentDictionary.value = null;
@@ -269,10 +280,6 @@ export function useTranslationWorkspace() {
     dictionaryContextError.value = "";
     dictionaryContextLoading.value = false;
     dictionaryContextRequestId.value = undefined;
-    if (segmentId) {
-      lockedSegmentId.value = segmentId;
-      hoveredSegmentId.value = undefined;
-    }
     dictionaryLoading.value = true;
     try {
       const lookup = await translator.dictionary.lookup({ query: term });
@@ -280,16 +287,33 @@ export function useTranslationWorkspace() {
       const firstSense = lookup.entry?.senses[0]?.translations[0] ?? "";
       glossaryFromDictionary.value = { sourceTerm: term, targetTerm: firstSense.split(/[；;，,]/)[0]?.trim() ?? "" };
       glossaryFromDictionaryNotice.value = "";
-      const profile = profiles.value.find((candidate) => candidate.id === profileId.value);
-      const context = dictionaryContext.value;
-      if (lookup.found && context && profile?.dictionaryMode === "contextual") {
-        dictionaryContextLoading.value = true;
-        dictionaryContextRequestId.value = await translator.dictionary.context.start({ term, source: context.source, target: context.target, targetLanguage: targetLanguage.value, profileId: profileId.value });
-      }
     } catch (error) {
       dictionaryError.value = error instanceof Error ? error.message : "本地词典暂时不可用。";
     } finally {
       dictionaryLoading.value = false;
+    }
+  }
+
+  async function requestDictionaryContext(): Promise<void> {
+    const context = dictionaryContext.value;
+    if (!dictionaryTerm.value || !segmentDictionary.value?.found || !context || dictionaryContextLoading.value) return;
+
+    translator.dictionary.context.cancel(dictionaryContextRequestId.value);
+    dictionaryContextText.value = "";
+    dictionaryContextError.value = "";
+    dictionaryContextLoading.value = true;
+    try {
+      dictionaryContextRequestId.value = await translator.dictionary.context.start({
+        term: dictionaryTerm.value,
+        source: context.source,
+        target: context.target,
+        targetLanguage: targetLanguage.value,
+        profileId: profileId.value
+      });
+    } catch (error) {
+      dictionaryContextError.value = error instanceof Error ? error.message : "上下文解释暂时不可用。";
+      dictionaryContextLoading.value = false;
+      dictionaryContextRequestId.value = undefined;
     }
   }
 
@@ -347,7 +371,7 @@ export function useTranslationWorkspace() {
     status, displayResultText, result, errorMessage, warningMessage, displaySegments, activeSegmentId, copied, copyResult, copySource, copyBilingual, copyNamingCandidate, stop, retry,
     handleSegmentHover, toggleSegment, clearSegmentLock, navigateSegment, lookupDictionary,
     ocrResult, ocrError, ocrLoading, captureOcr, closeOcr, ocrImage, ocrSelectionStyle, selectingOcr, beginOcrSelection, moveOcrSelection, endOcrSelection, cancelOcrSelection, setOcrImage,
-    dictionaryTerm, dictionaryCard, dictionaryLoading, dictionaryError, segmentDictionary, closeDictionary, dictionaryContext, dictionaryContextLoading, dictionaryContextText, dictionaryContextError, glossaryFromDictionary, glossaryFromDictionaryNotice, addDictionaryTermToGlossary,
+    dictionaryTerm, dictionaryCard, dictionaryLoading, dictionaryError, segmentDictionary, closeDictionary, dictionaryContext, dictionaryContextLoading, dictionaryContextText, dictionaryContextError, requestDictionaryContext, glossaryFromDictionary, glossaryFromDictionaryNotice, addDictionaryTermToGlossary,
     showRevisionPopover, alternativesLoading, requestAlternatives, addActiveSegmentToGlossary, revisions, lockedSegment, undoRevision, customRevisionInstruction, revisionStatus, reviseSegment, reviseWithCustomInstruction, alternatives, applyAlternative, revisionError, revisionNotice,
     glossaryValidation, sourceTextarea, cleanupDismissed
   };

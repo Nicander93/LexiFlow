@@ -24,7 +24,7 @@ const {
   navigateSegment, lookupDictionary, captureOcr, ocrResult, ocrError, ocrLoading, closeOcr, ocrSelectionStyle, selectingOcr,
   beginOcrSelection, moveOcrSelection, endOcrSelection, cancelOcrSelection, setOcrImage,
   dictionaryTerm, dictionaryLoading, dictionaryError, segmentDictionary, closeDictionary, dictionaryContext,
-  dictionaryContextLoading, dictionaryContextText, dictionaryContextError, glossaryFromDictionary, glossaryFromDictionaryNotice,
+  dictionaryContextLoading, dictionaryContextText, dictionaryContextError, requestDictionaryContext, glossaryFromDictionary, glossaryFromDictionaryNotice,
   addDictionaryTermToGlossary, showRevisionPopover, alternativesLoading, requestAlternatives, addActiveSegmentToGlossary,
   revisions, lockedSegment, undoRevision, customRevisionInstruction, revisionStatus, reviseSegment, reviseWithCustomInstruction,
   alternatives, applyAlternative, revisionError, revisionNotice
@@ -43,6 +43,7 @@ const emptyHint = computed(() => (mode.value === "naming"
   ? "描述含义，生成贴合语义的名称"
   : "支持粘贴、<b>划词</b>、OCR 输入"));
 const dictionaryNote = computed(() => {
+  if (dictionaryTerm.value) return "";
   if (dictionaryStatus.value !== "not-found" || !dictionaryEligible.value) return "";
   const suggestions = dictionarySuggestions.value.length ? ` · 建议：${dictionarySuggestions.value.join("、")}` : "";
   return `本地词典未收录，已按翻译处理${suggestions}`;
@@ -67,6 +68,12 @@ function setMode(value: "normal" | "naming"): void {
 
 function onOcrRequest(): void { void captureOcr(); }
 
+function handlePageKeydown(event: KeyboardEvent): void {
+  if (event.key !== "Escape") return;
+  if (dictionaryTerm.value) closeDictionary();
+  else if (lockedSegment.value) clearSegmentLock();
+}
+
 async function saveWord(entry: DictionaryEntry): Promise<void> {
   const context = lockedSegment.value?.source ?? (sourceText.value.length <= 500 ? sourceText.value : undefined);
   await vocabulary.saveDictionaryEntry(entry, context);
@@ -75,8 +82,12 @@ async function saveWord(entry: DictionaryEntry): Promise<void> {
 onMounted(() => {
   if (route.query.mode === "naming") setMode("naming");
   window.addEventListener("lexiflow:ocr", onOcrRequest);
+  window.addEventListener("keydown", handlePageKeydown);
 });
-onUnmounted(() => window.removeEventListener("lexiflow:ocr", onOcrRequest));
+onUnmounted(() => {
+  window.removeEventListener("lexiflow:ocr", onOcrRequest);
+  window.removeEventListener("keydown", handlePageKeydown);
+});
 </script>
 
 <template>
@@ -171,6 +182,7 @@ onUnmounted(() => window.removeEventListener("lexiflow:ocr", onOcrRequest));
       :notice="glossaryFromDictionaryNotice"
       @close="closeDictionary"
       @ai-translate="triggerAiTranslate"
+      @request-context="requestDictionaryContext"
       @update:source-term="glossaryFromDictionary.sourceTerm = $event"
       @update:target-term="glossaryFromDictionary.targetTerm = $event"
       @add-term="addDictionaryTermToGlossary"

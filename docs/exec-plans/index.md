@@ -10,6 +10,7 @@
 
 ## 最近完成
 
+- [翻译结果上下文交互简化](completed/result-context-simplification.md)：消除划词与句段点击冲突，统一并精简词典和局部重译面板。
 - [语音、单词本与桌面入口完善](completed/voice-vocabulary-shortcuts.md)：补齐朗读、生词管理、划词提示和后台快捷键体验。
 - [UI/UX VNext Round 2](completed/uiux-vnext-round2.md)：工作台、History、OCR、Popup、设置控件与视觉一致性重构。
 
