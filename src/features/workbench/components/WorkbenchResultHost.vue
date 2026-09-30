@@ -25,6 +25,7 @@ const props = defineProps<{
   dictionaryNote?: string;
   sourceLanguage?: string;
   targetLanguage?: string;
+  adjustable?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -71,6 +72,9 @@ const showPanelFallback = computed(() => props.resultType === "loading" || props
     :active-segment-id="activeSegmentId"
     :source-language="sourceLanguage"
     :target-language="targetLanguage"
+    :adjustable="adjustable"
+    :copied="copied"
+    @copy-bilingual="emit('copy-bilingual')"
     @copy-source="emit('copy-source')"
     @copy="emit('copy')"
     @hover="emit('hover', $event)"
@@ -86,6 +90,8 @@ const showPanelFallback = computed(() => props.resultType === "loading" || props
     :segments="segments"
     :active-segment-id="activeSegmentId"
     :target-language="targetLanguage"
+    :adjustable="adjustable"
+    :copied="copied"
     @copy="emit('copy')"
     @retry="emit('retry')"
     @copy-source="emit('copy-source')"

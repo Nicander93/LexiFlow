@@ -23,6 +23,36 @@ class FakeMouseHook implements GlobalMouseHook {
 }
 
 describe("SelectionMonitor", () => {
+  it("does not access the clipboard while an application window is focused", async () => {
+    const hook = new FakeMouseHook();
+    const capture = vi.fn(async () => ({ text: "selected text" }));
+    const onSelection = vi.fn();
+    const monitor = new SelectionMonitor(hook, capture, onSelection, undefined, undefined, () => false);
+    monitor.start();
+    hook.emit("mousedown", { button: 1, x: 100, y: 100 });
+    hook.emit("mouseup", { button: 1, x: 180, y: 100 });
+    await Promise.resolve();
+    expect(capture).not.toHaveBeenCalled();
+    expect(onSelection).not.toHaveBeenCalled();
+    monitor.stop();
+  });
+
+  it("discards an external capture when focus returns to the application", async () => {
+    const hook = new FakeMouseHook();
+    let eligible = true;
+    let resolveCapture!: (value: { text: string }) => void;
+    const onSelection = vi.fn();
+    const monitor = new SelectionMonitor(hook, () => new Promise((resolve) => { resolveCapture = resolve; }), onSelection, undefined, undefined, () => eligible);
+    monitor.start();
+    hook.emit("mousedown", { button: 1, x: 100, y: 100 });
+    hook.emit("mouseup", { button: 1, x: 180, y: 100 });
+    eligible = false;
+    resolveCapture({ text: "external selection" });
+    await Promise.resolve();
+    expect(onSelection).not.toHaveBeenCalled();
+    monitor.stop();
+  });
+
   it("开启后在完成有效划词时显示悬浮提示", async () => {
     const hook = new FakeMouseHook();
     const onSelection = vi.fn();

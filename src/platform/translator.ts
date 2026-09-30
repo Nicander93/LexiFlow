@@ -2,6 +2,7 @@ import type { TranslatorApi } from "../../electron/shared/api";
 import { DEFAULT_SETTINGS } from "../../electron/shared/defaults";
 import type { DictionaryContextEvent, DocumentTaskRecord, ProviderModel, SegmentAlternativeEvent, SegmentRevisionEvent, TranslationEvent, TranslationHistory, VocabularyEntry } from "../../electron/shared/types";
 import { previewDictionaryLookup } from "./dictionary-preview";
+import { resolveTargetLanguage } from "../../electron/shared/language";
 
 export function getTranslatorApi(): TranslatorApi {
   if (!window.translator) {
@@ -27,6 +28,8 @@ export function installBrowserPreviewApi(): void {
   const previewUuid = (): string => globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const listeners = new Set<(event: TranslationEvent) => void>();
   const revisionListeners = new Set<(event: SegmentRevisionEvent) => void>();
+  const selectionTranslationListeners = new Set<(event: TranslationEvent) => void>();
+  const selectionTranslationTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const alternativesListeners = new Set<(event: SegmentAlternativeEvent) => void>();
   const dictionaryContextListeners = new Set<(event: DictionaryContextEvent) => void>();
   const popupPayloadListeners = new Set<(payload: { text?: string; mode: "normal" | "technical" | "naming"; profileId?: string; capturing?: boolean; error?: string }) => void>();
@@ -197,6 +200,23 @@ export function installBrowserPreviewApi(): void {
         listeners.add(listener);
         return () => listeners.delete(listener);
       }
+    },
+    selectionTranslation: {
+      start: async (request) => {
+        const requestId = previewUuid();
+        const targetLanguage = resolveTargetLanguage(request.text, "auto");
+        const timer = setTimeout(() => {
+          selectionTranslationTimers.delete(requestId);
+          selectionTranslationListeners.forEach((listener) => listener({ requestId, status: "success", content: targetLanguage === "en" ? "Selected text translation preview." : "选中文字的翻译预览。" }));
+        }, 250);
+        selectionTranslationTimers.set(requestId, timer);
+        return requestId;
+      },
+      cancel: (requestId) => {
+        clearTimeout(selectionTranslationTimers.get(requestId));
+        selectionTranslationTimers.delete(requestId);
+      },
+      onEvent: (listener) => { selectionTranslationListeners.add(listener); return () => selectionTranslationListeners.delete(listener); }
     },
     revision: {
       start: async (request) => {

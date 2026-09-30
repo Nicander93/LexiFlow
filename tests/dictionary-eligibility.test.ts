@@ -11,6 +11,12 @@ describe("dictionary eligibility", () => {
   it("rejects chinese, sentences, urls, paths and code", () => {
     for (const text of [
       "你好",
+      "立即提升",
+      "hello 世界",
+      "привет hello",
+      "Hello there world.",
+      "Hello!",
+      "Hello?",
       "This is a complete English paragraph that should not be looked up.",
       "line one\nline two",
       "https://example.com",

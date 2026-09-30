@@ -26,6 +26,8 @@ export interface TranslationRequest {
   surface?: TranslationSurface;
 }
 
+export interface SelectionTranslationRequest { text: string; profileId?: string; }
+
 export interface TranslationProfile {
   id: string;
   name: string;

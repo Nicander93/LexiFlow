@@ -1,8 +1,8 @@
 .selection-tip-root,
 .selection-tip-root body,
 .selection-tip-root #app {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -10,8 +10,8 @@
 }
 
 .selection-tip-body {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -21,25 +21,22 @@
 .selection-tip {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  margin: 0;
+  width: 32px;
+  height: 32px;
+  margin: 2px;
   padding: 0;
   overflow: hidden;
-  border: 1px solid rgba(55, 89, 63, .12);
+  border: 0;
   border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 2px 7px rgba(31, 48, 35, .18);
+  background: transparent;
   cursor: pointer;
-  transition: transform .15s ease, filter .15s ease;
+  transition: background .15s ease;
 }
 .selection-tip:hover {
-  transform: scale(1.08);
-  background: #fff;
-  box-shadow: 0 3px 9px rgba(31, 48, 35, .24);
+  background: rgba(255, 255, 255, .88);
 }
 .selection-tip img {
   display: block;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
 }

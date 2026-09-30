@@ -61,6 +61,11 @@ test.beforeAll(async () => {
       usageCount: 2,
       revisions: [],
       segments: [{ id: "e2e-segment", source: "history source", target: "history result", sourceStart: 0, sourceEnd: 14 }]
+    }, {
+      id: "e2e-chinese-history", sourceText: "Chinese selection fixture.", resultText: "中文译文立即提升。",
+      mode: "normal", profileId: "general", sourceLanguage: "en", targetLanguage: "zh-CN", provider: "ollama", model: "e2e-fixture",
+      createdAt: "2026-08-08T00:00:00.000Z", isFavorite: false, revisions: [],
+      segments: [{ id: "e2e-chinese-segment", source: "Chinese selection fixture.", target: "中文译文立即提升。", sourceStart: 0, sourceEnd: 26 }]
     }]
   }), "utf8");
   await writeFile(resolve(e2eUserDataDir, "document-tasks.json"), JSON.stringify({
@@ -129,6 +134,23 @@ test.beforeAll(async () => {
   mainWindow = selected;
   mainWindow.on("pageerror", (error) => console.error("[e2e main pageerror]", error.message));
   await mainWindow.waitForLoadState("domcontentloaded");
+  // The user's running LexiFlow owns its real shortcuts. Find independent test
+  // bindings through the same Windows API without disturbing that process.
+  const shortcuts = await electronApp.evaluate(({ globalShortcut }) => {
+    const available: string[] = [];
+    for (let key = 13; key <= 24 && available.length < 3; key += 1) {
+      const shortcut = `Ctrl+Alt+Shift+F${key}`;
+      if (!globalShortcut.register(shortcut, () => undefined)) continue;
+      globalShortcut.unregister(shortcut);
+      available.push(shortcut);
+    }
+    if (available.length < 3) throw new Error("Not enough free native shortcuts for the isolated E2E process.");
+    return { translation: available[0]!, naming: available[1]!, screenshot: available[2]! };
+  });
+  await mainWindow.evaluate(async (configured) => {
+    const api = (window as Window & { translator?: TranslatorApi }).translator!;
+    await api.settings.patch({ type: "update-shortcuts", value: configured });
+  }, shortcuts);
   console.info("[e2e] main window url=", mainWindow.url());
 });
 
@@ -138,7 +160,7 @@ test.afterAll(async () => {
     // this Playwright-owned child after assertions so native shortcuts cannot
     // hold the worker open.
     const child = electronApp.process();
-    if (!child.killed) child.kill();
+    if (!child.killed) child.kill("SIGKILL");
   }
   if (e2eUserDataDir) void rm(e2eUserDataDir, { recursive: true, force: true }).catch(() => undefined);
 });
@@ -221,14 +243,73 @@ test("local dictionary lookup shows card without requiring a model", async () =>
   await saveUiScreenshot(mainWindow, "dictionary.png");
 });
 
+test("internal selections translate independently in both directions", async () => {
+  await electronApp.evaluate(({ ipcMain }, channels) => {
+    ipcMain.removeHandler(channels.selectionTranslationStart);
+    ipcMain.handle(channels.selectionTranslationStart, (event, request) => {
+      const text = request.text as string;
+      (globalThis as typeof globalThis & { __selectionText?: string }).__selectionText = text;
+      const id = `selection-${Date.now()}`;
+      setTimeout(() => event.sender.send(channels.selectionTranslationEvent, { requestId: id, status: "success", content: /[\u3400-\u9fff]/.test(text) ? "Selected Chinese translation." : "选中的英文译文。" }), 150);
+      return id;
+    });
+  }, IPC_CHANNELS);
+  await mainWindow.getByRole("button", { name: "历史记录" }).click();
+  await mainWindow.locator(".drawer-item").filter({ hasText: "Chinese selection fixture." }).click();
+  const target = mainWindow.locator(".simple-target .translation-segment");
+  const before = await mainWindow.evaluate(async () => {
+    const api = (window as Window & { translator?: TranslatorApi }).translator!;
+    return { session: await api.translation.getSession(), history: await api.history.list() };
+  });
+  await target.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  });
+  await expect(mainWindow.getByRole("button", { name: "查词", exact: true })).toHaveCount(0);
+  await mainWindow.getByRole("button", { name: "翻译选中内容", exact: true }).click();
+  const panel = mainWindow.getByRole("region", { name: "选中内容翻译", exact: true });
+  await expect(panel).toContainText("中文 → 英文");
+  await expect(panel).toContainText("Selected Chinese translation.");
+  await expect(target).toHaveText("中文译文立即提升。");
+  await panel.getByRole("button", { name: "复制选区译文" }).click();
+  expect(await electronApp.evaluate(({ clipboard }) => clipboard.readText())).toBe("Selected Chinese translation.");
+  await mainWindow.getByRole("button", { name: "关闭选区翻译" }).click();
+
+  const source = mainWindow.getByPlaceholder("输入或粘贴文本");
+  await source.evaluate((element) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(0, 7);
+    input.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  });
+  await expect(mainWindow.getByRole("button", { name: "查词", exact: true })).toBeVisible();
+  await mainWindow.getByRole("button", { name: "翻译选中内容", exact: true }).click();
+  await expect(panel).toContainText("英文 → 中文");
+  await expect(panel).toContainText("选中的英文译文。");
+  expect(await electronApp.evaluate(() => (globalThis as typeof globalThis & { __selectionText?: string }).__selectionText)).toBe("Chinese");
+  await expect(source).toHaveValue("Chinese selection fixture.");
+  const after = await mainWindow.evaluate(async () => {
+    const api = (window as Window & { translator?: TranslatorApi }).translator!;
+    return { session: await api.translation.getSession(), history: await api.history.list() };
+  });
+  expect(after).toEqual(before);
+  await saveUiScreenshot(mainWindow, "internal-selection-translation.png", true);
+  await mainWindow.getByRole("button", { name: "关闭选区翻译" }).click();
+});
+
 test("text selection and segment revision use one contextual panel", async () => {
   await mainWindow.evaluate(() => { location.hash = "#/"; });
   await mainWindow.getByRole("button", { name: "历史记录" }).click();
   await mainWindow.locator(".drawer-item").filter({ hasText: "history source" }).click();
 
-  const segment = mainWindow.getByRole("button", { name: "history result", exact: true });
+  const segment = mainWindow.locator(".simple-target .translation-segment");
   await expect(segment).toBeVisible();
   await segment.click();
+  await expect(mainWindow.getByText("调整这句话", { exact: true })).toHaveCount(0);
+  await mainWindow.getByRole("button", { name: "调整第 1 句" }).click();
   await expect(mainWindow.getByText("调整这句话", { exact: true })).toBeVisible();
 
   await segment.evaluate((element) => {
@@ -244,18 +325,110 @@ test("text selection and segment revision use one contextual panel", async () =>
     element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 
+  await expect(mainWindow.getByRole("button", { name: "查词", exact: true })).toBeVisible();
+  await expect(mainWindow.getByText("词典", { exact: true })).toHaveCount(0);
+  await mainWindow.getByRole("button", { name: "查词", exact: true }).click();
   await expect(mainWindow.getByText("词典", { exact: true })).toBeVisible();
   await expect(mainWindow.getByText("调整这句话", { exact: true })).toHaveCount(0);
   await saveUiScreenshot(mainWindow, "translation-context-dictionary.png");
 
   await mainWindow.keyboard.press("Escape");
   await expect(mainWindow.getByText("词典", { exact: true })).toHaveCount(0);
-  await segment.click();
+  await mainWindow.getByRole("button", { name: "调整第 1 句" }).click();
   await expect(mainWindow.getByText("调整这句话", { exact: true })).toBeVisible();
+});
+
+test("Chinese selection stays native and drafts preserve the previous translation", async () => {
+  await mainWindow.getByRole("button", { name: "关闭局部重译" }).click();
+  await mainWindow.getByRole("button", { name: "历史记录" }).click();
+  await mainWindow.locator(".drawer-item").filter({ hasText: "Chinese selection fixture." }).click();
+  const target = mainWindow.locator(".simple-target .translation-segment");
+  await expect(target).toHaveText("中文译文立即提升。");
+  await target.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  });
+  await expect(mainWindow.getByRole("button", { name: "查词", exact: true })).toHaveCount(0);
+  await expect(mainWindow.getByText("词典", { exact: true })).toHaveCount(0);
+  expect(await mainWindow.evaluate(() => window.getSelection()?.toString())).toBe("中文译文立即提升。");
+  await mainWindow.getByRole("button", { name: "双语对照", exact: true }).click();
+  await mainWindow.locator(".segment-text--source .translation-segment").evaluate((element) => {
+    const text = element.firstChild;
+    if (!text) throw new Error("Expected source text node.");
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, "Chinese".length);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  });
+  await mainWindow.getByRole("button", { name: "查词", exact: true }).click();
+  await expect(mainWindow.getByText("词典", { exact: true })).toBeVisible();
+  await mainWindow.keyboard.press("Escape");
+  await mainWindow.getByRole("button", { name: "仅译文", exact: true }).click();
+  await mainWindow.getByPlaceholder("输入或粘贴文本").fill("Changed source draft.");
+  await expect(mainWindow.getByText(/原文已修改，译文待更新/)).toBeVisible();
+  await expect(target).toHaveText("中文译文立即提升。");
+  await expect(mainWindow.getByRole("button", { name: "调整第 1 句" })).toHaveCount(0);
+  await mainWindow.getByRole("button", { name: "双语对照", exact: true }).click();
+  await expect(mainWindow.locator(".segment-text--source .translation-segment")).toHaveText("Chinese selection fixture.");
+  await mainWindow.getByRole("button", { name: "仅译文", exact: true }).click();
+  await mainWindow.getByRole("button", { name: "清空输入" }).click();
+  await expect(mainWindow.locator(".translation-segment")).toHaveCount(0);
+});
+
+test("revision comparison requires confirmation and can undo, restore, or discard", async () => {
+  await electronApp.evaluate(({ ipcMain }, channels) => {
+    ipcMain.removeHandler(channels.revisionStart);
+    let count = 0;
+    ipcMain.handle(channels.revisionStart, (event, request) => {
+      const requestId = `e2e-revision-${++count}`;
+      setTimeout(() => event.sender.send(channels.revisionEvent, {
+        requestId, status: "success", revision: {
+          id: requestId, segmentId: request.segment.id, previousTarget: request.segment.target,
+          newTarget: "新的建议译文。", instruction: request.instruction, createdAt: Date.now()
+        }
+      }), 150);
+      return requestId;
+    });
+  }, { revisionStart: IPC_CHANNELS.revisionStart, revisionEvent: IPC_CHANNELS.revisionEvent });
+
+  await mainWindow.getByRole("button", { name: "历史记录" }).click();
+  await mainWindow.locator(".drawer-item").filter({ hasText: "history source" }).click();
+  const target = mainWindow.locator(".simple-target .translation-segment");
+  await mainWindow.getByRole("button", { name: "调整第 1 句" }).click();
+  await mainWindow.getByRole("button", { name: "更自然", exact: true }).click();
+  await expect(mainWindow.locator(".revision-suggestion p")).toHaveText("新的建议译文。");
+  await saveUiScreenshot(mainWindow, "workbench-revision-comparison.png", true);
+  await expect(target).toHaveText("history result");
+  const beforeApply = await mainWindow.evaluate(async () => (window as Window & { translator?: TranslatorApi }).translator!.history.get("e2e-history"));
+  expect(beforeApply?.revisions).toHaveLength(0);
+  await mainWindow.getByRole("button", { name: "复制译文", exact: true }).click();
+  await expect.poll(() => electronApp.evaluate(({ clipboard }) => clipboard.readText())).toBe("history result");
+  await mainWindow.getByRole("button", { name: "替换这句", exact: true }).click();
+  await expect(target).toHaveText("新的建议译文。");
+  await mainWindow.getByRole("button", { name: "历史记录" }).click();
+  await mainWindow.locator(".drawer-item").filter({ hasText: "history source" }).click();
+  await expect(target).toHaveText("新的建议译文。");
+  await mainWindow.getByRole("button", { name: "调整第 1 句" }).click();
+  await mainWindow.getByRole("button", { name: "撤销本句修改", exact: true }).click();
+  await expect(target).toHaveText("history result");
+  await mainWindow.getByRole("button", { name: "更自然", exact: true }).click();
+  await mainWindow.getByRole("button", { name: "关闭局部重译" }).click();
+  await mainWindow.waitForTimeout(250);
+  await mainWindow.getByRole("button", { name: "调整第 1 句" }).click();
+  await expect(mainWindow.locator(".revision-suggestion")).toHaveCount(0);
+  await expect(target).toHaveText("history result");
+  await mainWindow.getByRole("button", { name: "关闭局部重译" }).click();
+  await saveUiScreenshot(mainWindow, "workbench-revision-confirmed.png");
 });
 
 test("dictionary words can be saved and managed in the vocabulary book", async () => {
   await mainWindow.evaluate(() => { location.hash = "#/"; });
+  if (await mainWindow.getByRole("button", { name: "清空输入" }).count()) await mainWindow.getByRole("button", { name: "清空输入" }).click();
   const source = mainWindow.getByPlaceholder("输入或粘贴文本");
   await source.fill("sorry");
   await expect(mainWindow.getByRole("heading", { name: "sorry" })).toBeVisible({ timeout: 10_000 });
@@ -293,7 +466,20 @@ test("selection tip icon fills its transparent 36px hit target without clipping"
       outerHeight: button.getBoundingClientRect().height + Number.parseFloat(buttonStyle.marginTop) + Number.parseFloat(buttonStyle.marginBottom)
     };
   });
-  expect(metrics).toEqual({ bodyClass: true, buttonWidth: 32, buttonHeight: 32, imageWidth: 32, imageHeight: 32, outerWidth: 36, outerHeight: 36 });
+  expect(metrics.bodyClass).toBe(true);
+  for (const key of ["buttonWidth", "buttonHeight", "imageWidth", "imageHeight"] as const) expect(metrics[key]).toBeCloseTo(32, 1);
+  expect(metrics.outerWidth).toBeCloseTo(36, 1);
+  expect(metrics.outerHeight).toBeCloseTo(36, 1);
+  await tip.hover();
+  const hoverBounds = await tip.evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+  });
+  expect(hoverBounds.left).toBeGreaterThanOrEqual(0);
+  expect(hoverBounds.top).toBeGreaterThanOrEqual(0);
+  expect(hoverBounds.right).toBeLessThanOrEqual(36);
+  expect(hoverBounds.bottom).toBeLessThanOrEqual(36);
+  await mainWindow.screenshot({ path: resolve(uiVerificationDir, "selection-tip-fixed.png"), clip: { x: 0, y: 0, width: 36, height: 36 } });
   await mainWindow.evaluate(() => { location.hash = "#/"; });
   await expect(mainWindow.getByPlaceholder("输入或粘贴文本")).toBeVisible();
 });
@@ -349,6 +535,35 @@ test("API keys stay masked and never enter settings JSON as plaintext", async ()
   });
 });
 
+test("popup selections use the internal toolbar and reset on a new payload", async () => {
+  const popup = await popupPage();
+  const sendPayload = () => electronApp.evaluate(({ BrowserWindow }, input) => {
+    const window = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes("#/popup"));
+    window?.webContents.send(input.channel, { text: "sorry", mode: "normal", profileId: "general" });
+    window?.show();
+  }, { channel: IPC_CHANNELS.popupPayload });
+  await sendPayload();
+  await expect(popup.locator(".dictionary-card-header strong")).toHaveText("sorry");
+  const select = () => popup.locator(".popup-source-vnext p").evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  });
+  await select();
+  await expect(popup.getByRole("button", { name: "查词", exact: true })).toBeVisible();
+  await popup.getByRole("button", { name: "翻译选中内容", exact: true }).click();
+  await expect(popup.getByRole("region", { name: "选中内容翻译" })).toContainText("选中的英文译文。");
+  await popup.keyboard.press("Escape");
+  await expect(popup.getByRole("region", { name: "选中内容翻译" })).toHaveCount(0);
+  await expect(popup.locator(".dictionary-card-header strong")).toHaveText("sorry");
+  await select();
+  await popup.getByRole("button", { name: "翻译选中内容", exact: true }).click();
+  await sendPayload();
+  await expect(popup.getByRole("region", { name: "选中内容翻译" })).toHaveCount(0);
+});
+
 test("popup streaming layout does not persist automatic bounds", async () => {
   const popup = await popupPage();
   const settingsPath = resolve(e2eUserDataDir, "settings.json");
@@ -370,9 +585,9 @@ test("invalid runtime shortcut registration rejects persistence and restores the
     const state = globalThis as typeof globalThis & { __lexiflowOriginalRegister?: typeof globalShortcut.register; __lexiflowRegisterAttempts?: string[] };
     state.__lexiflowOriginalRegister = globalShortcut.register;
     state.__lexiflowRegisterAttempts = [];
-    globalShortcut.register = ((accelerator) => {
+    globalShortcut.register = ((accelerator, callback) => {
       state.__lexiflowRegisterAttempts?.push(accelerator);
-      return accelerator !== "Ctrl+Alt+Y";
+      return accelerator !== "Ctrl+Alt+Y" && state.__lexiflowOriginalRegister!(accelerator, callback);
     }) as typeof globalShortcut.register;
   });
   let result: { error: string; previousShortcuts: { translation: string; naming: string; screenshot: string }; afterShortcuts: { translation: string; naming: string; screenshot: string } };
@@ -415,18 +630,12 @@ test("invalid runtime shortcut registration rejects persistence and restores the
     });
     await mainWindow.evaluate(async () => {
       const api = (globalThis as unknown as Window & { translator?: TranslatorApi }).translator!;
-      await api.settings.patch({ type: "update-shortcuts", value: { paused: true } });
-      await api.settings.patch({ type: "update-shortcuts", value: { paused: false } });
     });
   }
 
   expect(result.error).toContain("注册失败");
   expect(result.afterShortcuts).toEqual(result.previousShortcuts);
-  expect(attempts).toEqual(expect.arrayContaining([
-    result.previousShortcuts.translation,
-    result.previousShortcuts.naming,
-    result.previousShortcuts.screenshot
-  ]));
+  expect(attempts).toEqual(["Ctrl+Alt+Y", result.previousShortcuts.naming]);
 });
 
 test("running Windows process registers the configured global shortcuts", async () => {
@@ -441,10 +650,40 @@ test("running Windows process registers the configured global shortcuts", async 
   }), shortcuts);
 
   expect(registered).toEqual({
-    translation: shortcuts.enableSelectionTranslation && !shortcuts.paused,
-    naming: !shortcuts.paused,
-    screenshot: !shortcuts.paused
+    translation: Boolean(shortcuts.translation) && !shortcuts.paused,
+    naming: Boolean(shortcuts.naming) && !shortcuts.paused,
+    screenshot: Boolean(shortcuts.screenshot) && !shortcuts.paused
   });
+});
+
+test("native shortcut state remains independent from selection, pause and clear", async () => {
+  const result = await mainWindow.evaluate(async () => {
+    const api = (window as Window & { translator?: TranslatorApi }).translator!;
+    const before = (await api.settings.get()).shortcuts;
+    const statuses = [];
+    try {
+      await api.settings.patch({ type: "update-shortcuts", value: { enableSelectionTranslation: false } });
+      statuses.push((await api.runtime.ping()).shortcutStatus);
+      await api.settings.patch({ type: "update-shortcuts", value: { paused: true } });
+      await api.settings.patch({ type: "update-shortcuts", value: { paused: false, translation: "" } });
+      statuses.push((await api.runtime.ping()).shortcutStatus);
+    } finally {
+      await api.settings.patch({ type: "update-shortcuts", value: before });
+    }
+    return { statuses, before, restored: (await api.runtime.ping()).shortcutStatus };
+  });
+  expect(result.statuses.every((status) => status?.errors.length === 0)).toBe(true);
+  expect(result.restored).toEqual({ translation: true, naming: true, screenshot: true, errors: [] });
+  const native = await electronApp.evaluate(({ globalShortcut }, shortcuts) => [shortcuts.translation, shortcuts.naming, shortcuts.screenshot].every((shortcut) => globalShortcut.isRegistered(shortcut)), result.before);
+  expect(native).toBe(true);
+  await navLink(mainWindow, "#/settings").click();
+  await mainWindow.getByRole("button", { name: "划词与快捷键", exact: true }).click();
+  const status = mainWindow.getByRole("status", { name: "快捷键运行状态" });
+  await expect(status).toContainText("快速翻译：已生效");
+  await expect(status).toContainText("编程命名：已生效");
+  await expect(status).toContainText("截图 OCR：已生效");
+  await saveUiScreenshot(mainWindow, "shortcut-status-fixed.png", true);
+  await mainWindow.getByRole("button", { name: "返回翻译" }).click();
 });
 
 test("native OCR smoke recognizes only the selected screen region", async () => {
@@ -525,7 +764,7 @@ test("history overlay restores a stored session without route change", async () 
   await expect.poll(() => new URL(mainWindow.url()).hash).toBe(hashBefore);
   const item = mainWindow.getByText("history source", { exact: true });
   await expect(item).toBeVisible();
-  await expect(mainWindow.getByText(/主窗口/)).toBeVisible();
+  await expect(mainWindow.locator(".drawer-item").filter({ hasText: "history source" }).getByText(/主窗口/)).toBeVisible();
   await item.click();
   await expect(mainWindow.getByRole("heading", { name: "历史" })).toHaveCount(0);
   await expect(mainWindow.getByPlaceholder("输入或粘贴文本")).toHaveValue("history source");
@@ -576,8 +815,17 @@ async function sourceClearAndValidate(): Promise<void> {
   }
   const source = mainWindow.locator("textarea").first();
   await source.fill("");
-  await mainWindow.getByRole("button", { name: "开始翻译", exact: true }).click();
-  await expect(mainWindow.getByText(/请输入文本/)).toBeVisible();
+  await expect(mainWindow.getByRole("button", { name: "开始翻译", exact: true })).toBeDisabled();
+  const validationError = await mainWindow.evaluate(async () => {
+    const api = (window as Window & { translator?: TranslatorApi }).translator!;
+    try {
+      await api.translation.start({ text: "", mode: "normal", targetLanguage: "zh-CN" });
+      return "";
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  });
+  expect(validationError).toMatch(/请输入文本/);
 }
 
 test("configured Ollama model completes a real translation", async () => {

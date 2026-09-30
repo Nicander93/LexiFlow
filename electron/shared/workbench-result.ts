@@ -17,12 +17,17 @@ export function resolveWorkbenchResultType(input: {
   displaySegments: TranslationSegment[];
   showMainDictionary: boolean;
   namingResult: NamingResult | null;
+  readingLayout?: "auto" | "translation" | "bilingual";
 }): WorkbenchResultType {
   if (!input.sourceText && input.status === "idle") return "empty";
   if (input.showMainDictionary) return "dictionary";
   if (input.mode === "naming" && input.namingResult) return "naming";
   if (input.status === "loading" || input.status === "streaming") return "loading";
   if (input.status === "error") return "error";
+  if (input.mode !== "naming" && input.status === "success" && input.displaySegments.length) {
+    if (input.readingLayout === "bilingual") return "bilingual";
+    if (input.readingLayout === "translation") return "translation";
+  }
   if (
     input.mode !== "naming"
     && input.status === "success"

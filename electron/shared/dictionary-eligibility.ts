@@ -3,7 +3,7 @@ const HAS_CJK = /[\u4e00-\u9fff]/;
 const LOOKS_LIKE_URL = /https?:\/\/|www\./i;
 const LOOKS_LIKE_PATH = /^[A-Za-z]:\\|\\\\|\/(?:usr|home|var|tmp|etc)\//i;
 const LOOKS_LIKE_CODE = /[{}();=<>]|=>|::|\b(?:const|let|var|function|return|class|import|export)\b/;
-const SENTENCE_END = /[.!?]。/;
+const SENTENCE_END = /[.!?。]$/;
 
 export function shouldLookupDictionary(text: string): boolean {
   const trimmed = text.trim();
@@ -11,6 +11,7 @@ export function shouldLookupDictionary(text: string): boolean {
   if (trimmed.length > 64) return false;
   if (!HAS_LATIN.test(trimmed)) return false;
   if (HAS_CJK.test(trimmed)) return false;
+  if (!/^[A-Za-z0-9\s'’.-]+$/.test(trimmed)) return false;
   if (trimmed.includes("\n") || trimmed.includes("\r")) return false;
   if (LOOKS_LIKE_URL.test(trimmed)) return false;
   if (LOOKS_LIKE_PATH.test(trimmed)) return false;

@@ -23,7 +23,7 @@ export type TranslationEngineProgress =
 export interface TranslationEngineInput {
   text: string;
   profileId?: string;
-  taskType: "translation" | "naming" | "document-chunk";
+  taskType: "translation" | "naming" | "document-chunk" | "selection";
   mode?: TranslationMode;
   profilePrompt?: string;
   targetLanguage: TargetLanguage;
@@ -94,6 +94,7 @@ export class TranslationEngine {
       profileId: input.profileId,
       profilePrompt: input.profilePrompt
     });
+    if (input.taskType === "selection") policy.targetLanguage = "auto";
     const access = resolveModelAccess(settings, {
       profile,
       task: input.taskType === "document-chunk" ? "document" : "translation",

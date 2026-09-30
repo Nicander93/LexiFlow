@@ -52,6 +52,7 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); }
 .danger { color: var(--danger) !important; }
 .app-icon { display: block; flex: 0 0 auto; }
 .selectable,
+[data-selection-text],
 textarea,
 input,
 select,

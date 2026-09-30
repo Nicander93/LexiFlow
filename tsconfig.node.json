@@ -1,6 +1,7 @@
 {
   "extends": "@vue/tsconfig/tsconfig.json",
   "include": ["vite.config.ts", "electron/**/*.ts", "tests/**/*.ts", "playwright.config.ts"],
+  "exclude": ["tests/renderer/**"],
   "compilerOptions": {
     "composite": true,
     "types": ["node", "electron", "vitest/globals"],

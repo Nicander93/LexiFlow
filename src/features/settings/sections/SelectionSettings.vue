@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import type { AppSettings, TranslationProfile } from "../../../../electron/shared/types";
+import type { AppSettings, ShortcutRegistrationResult, TranslationProfile } from "../../../../electron/shared/types";
 import UiSelect from "../../../components/UiSelect.vue";
 import SettingGroup from "../components/SettingGroup.vue";
 import SettingRow from "../components/SettingRow.vue";
 import ShortcutRecorder from "../ShortcutRecorder.vue";
 import { DEFAULT_SETTINGS } from "../../../../electron/shared/defaults";
 
-const props = defineProps<{ settings: AppSettings; profiles: TranslationProfile[] }>();
+const props = defineProps<{ settings: AppSettings; profiles: TranslationProfile[]; shortcutStatus?: ShortcutRegistrationResult }>();
+const shortcutLabels = { translation: "快速翻译", naming: "编程命名", screenshot: "截图 OCR" };
 const emit = defineEmits<{ save: []; error: [message: string] }>();
 
 function commitShortcut(key: "translation" | "naming" | "screenshot", value: string): void {
@@ -30,6 +31,12 @@ function restoreRecommendedShortcuts(): void {
   </SettingGroup>
 
   <SettingGroup title="全局快捷键" description="LexiFlow 在后台运行时生效。推荐使用三修饰键组合，减少与 VS Code 等开发工具冲突；清空表示停用。">
+    <div class="shortcut-status" aria-label="快捷键运行状态" role="status">
+      <p v-for="(label, key) in shortcutLabels" :key="key">
+        {{ label }}：{{ settings.shortcuts.paused ? '已暂停' : !settings.shortcuts[key] ? '已停用' : !shortcutStatus ? '状态暂不可用' : shortcutStatus[key] ? '已生效' : '未生效' }}
+      </p>
+      <p v-for="error in shortcutStatus?.errors" :key="error" class="error-text">{{ error }}</p>
+    </div>
     <SettingRow title="推荐快捷键" description="恢复低冲突的 Ctrl + Alt + Shift 组合">
       <button type="button" class="secondary-button" @click="restoreRecommendedShortcuts">恢复推荐组合</button>
     </SettingRow>
@@ -76,3 +83,8 @@ function restoreRecommendedShortcuts(): void {
     </SettingRow>
   </SettingGroup>
 </template>
+
+<style scoped>
+.shortcut-status { padding: 8px 14px; font-size: 12px; color: var(--ink-soft); }
+.shortcut-status p { margin: 4px 0; }
+</style>

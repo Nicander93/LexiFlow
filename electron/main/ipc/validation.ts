@@ -10,6 +10,7 @@ import type {
   SegmentRevisionRequest,
   SettingsPatch,
   TranslationRequest,
+  SelectionTranslationRequest,
   TranslationProfile
   ,VocabularyUpsertInput
 } from "../../shared/types";
@@ -56,6 +57,11 @@ export function parseTranslationRequest(value: unknown): TranslationRequest {
     request.surface = input.surface;
   }
   return request;
+}
+
+export function parseSelectionTranslationRequest(value: unknown): SelectionTranslationRequest {
+  const input = record(value, "选区翻译请求");
+  return { text: text(input.text, "原文"), profileId: input.profileId === undefined ? undefined : parseId(input.profileId, "Profile ID") };
 }
 
 function parseSegmentRequest(value: unknown, label: string): Record<string, unknown> {
@@ -115,7 +121,8 @@ export function parseSettingsPatch(value: unknown): SettingsPatch {
     for (const key of ["remoteUsageConfirmed", "enableReasoning", "stream"]) if (patch[key] !== undefined) parseBoolean(patch[key], key);
     if (patch.apiKey !== undefined) parseString(patch.apiKey, "API Key", 10_000);
   } else if (input.type === "update-shortcuts") {
-    for (const key of ["translation", "naming", "screenshot", "defaultTranslationProfileId"]) if (patch[key] !== undefined) text(patch[key], key, 256);
+    for (const key of ["translation", "naming", "screenshot"]) if (patch[key] !== undefined) parseString(patch[key], key, 256);
+    if (patch.defaultTranslationProfileId !== undefined) text(patch.defaultTranslationProfileId, "defaultTranslationProfileId", 256);
     if (patch.paused !== undefined) parseBoolean(patch.paused, "暂停状态");
     if (patch.enableSelectionTranslation !== undefined) parseBoolean(patch.enableSelectionTranslation, "划词翻译状态");
   } else if (input.type === "update-window") {

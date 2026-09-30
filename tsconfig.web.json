@@ -1,6 +1,6 @@
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
-  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts", "electron/shared/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts", "electron/shared/**/*.ts", "tests/renderer/**/*.ts"],
   "compilerOptions": {
     "composite": true,
     "paths": {

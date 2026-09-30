@@ -21,6 +21,22 @@ function fakeStore(): { store: SettingsStore; value: AppSettings } {
 }
 
 describe("SettingsService 字段级命令", () => {
+  it("resets local settings even when recommended shortcuts are occupied", async () => {
+    let value = structuredClone(DEFAULT_SETTINGS);
+    value.shortcuts.translation = "Ctrl+Alt+F16";
+    const store: SettingsRepository = {
+      get: () => structuredClone(value), getPublic: () => structuredClone(value),
+      patch: async (command) => { value = applySettingsPatch(value, command); return structuredClone(value); },
+      reset: async () => structuredClone(DEFAULT_SETTINGS)
+    };
+    const applyShortcuts = vi.fn(() => ({ translation: false, naming: true, screenshot: true, errors: ["shortcut occupied"] }));
+    const useCases = new SettingsUseCases(store, new SettingsService(store), { prune: vi.fn() } as never, { applyShortcuts });
+    const result = await useCases.reset();
+    expect(result.snapshot.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.shortcutResult.errors).toEqual(["shortcut occupied"]);
+    expect(applyShortcuts).toHaveBeenCalledWith(DEFAULT_SETTINGS, { allowPartial: true });
+  });
+
   it("并发 provider 与 popupBounds 更新不会互相覆盖", async () => {
     const { store } = fakeStore();
     const service = new SettingsService(store);

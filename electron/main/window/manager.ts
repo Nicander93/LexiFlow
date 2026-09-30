@@ -234,8 +234,8 @@ export class WindowManager {
   private async ensureSelectionTipWindow(): Promise<BrowserWindow> {
     if (this.selectionTipWindow && !this.selectionTipWindow.isDestroyed()) return this.selectionTipWindow;
     const window = this.createWindow({
-      width: 30,
-      height: 30,
+      width: 36,
+      height: 36,
       show: false,
       frame: false,
       transparent: true,

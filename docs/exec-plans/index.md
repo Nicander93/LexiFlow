@@ -10,6 +10,9 @@
 
 ## 最近完成
 
+- [划词 Logo 与系统快捷键修复](completed/selection-logo-shortcuts.md)：统一悬浮提示尺寸，快捷键冲突保留可用项，提供运行状态，修复清空与默认重置。
+- [应用内选区翻译与中英交互](completed/internal-selection-translation.md)：排除内部系统划词，统一输入/正文选区翻译，仅英文提供词典，选区结果独立于全文与历史。
+- [翻译工作台交互修正](completed/workbench-interaction.md)：明确查词与句旁调整，重译先对比再替换，保留原文草稿对应的旧译文，支持布局切换与历史撤销。
 - [翻译结果上下文交互简化](completed/result-context-simplification.md)：消除划词与句段点击冲突，统一并精简词典和局部重译面板。
 - [语音、单词本与桌面入口完善](completed/voice-vocabulary-shortcuts.md)：补齐朗读、生词管理、划词提示和后台快捷键体验。
 - [UI/UX VNext Round 2](completed/uiux-vnext-round2.md)：工作台、History、OCR、Popup、设置控件与视觉一致性重构。

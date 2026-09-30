@@ -4,7 +4,7 @@ import type { HistoryService } from "../history/history-service";
 import { applySettingsPatch, SettingsService, type SettingsRepository } from "./settings-service";
 
 export interface SettingsEffects {
-  applyShortcuts(settings: AppSettings): ShortcutRegistrationResult;
+  applyShortcuts(settings: AppSettings, options?: { allowPartial?: boolean }): ShortcutRegistrationResult;
   applyStartup?: (settings: AppSettings) => void;
   applyWindow?: (settings: AppSettings) => void;
 }
@@ -29,8 +29,8 @@ export class SettingsUseCases {
     const shortcutsChanged = JSON.stringify(before.shortcuts) !== JSON.stringify(candidate.shortcuts);
     let shortcutResult: ShortcutRegistrationResult = { translation: true, naming: true, screenshot: true, errors: [] };
     if (shortcutsChanged) {
-      shortcutResult = this.effects.applyShortcuts(candidate);
-      if (shortcutResult.errors.length) {
+      shortcutResult = command.type === "reset" ? this.effects.applyShortcuts(candidate, { allowPartial: true }) : this.effects.applyShortcuts(candidate);
+      if (shortcutResult.errors.length && command.type !== "reset") {
         this.effects.applyShortcuts(before);
         throw new Error(shortcutResult.errors.join("\n"));
       }

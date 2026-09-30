@@ -12,6 +12,7 @@ export function useWorkbenchResultType(options: {
   displaySegments: Ref<TranslationSegment[]>;
   showMainDictionary: Ref<boolean>;
   namingResult: Ref<NamingResult | null>;
+  readingLayout?: Ref<"auto" | "translation" | "bilingual">;
 }) {
   return computed<WorkbenchResultType>(() => resolveWorkbenchResultType({
     mode: options.mode.value,
@@ -20,6 +21,7 @@ export function useWorkbenchResultType(options: {
     displayResultText: options.displayResultText.value,
     displaySegments: options.displaySegments.value,
     showMainDictionary: options.showMainDictionary.value,
-    namingResult: options.namingResult.value
+    namingResult: options.namingResult.value,
+    readingLayout: options.readingLayout?.value
   }));
 }

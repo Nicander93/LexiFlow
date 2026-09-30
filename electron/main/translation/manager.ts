@@ -26,6 +26,7 @@ import {
   type SegmentAlternativeEvent,
   type SegmentAlternativeRequest,
   type TranslationEvent,
+  type SelectionTranslationRequest,
   type TranslationRequest,
   type TranslationSurface,
   type TranslationState
@@ -108,6 +109,39 @@ export class TranslationManager {
     const signal = this.coordinator.begin("segment-revision", id);
     void this.interactive.runRevision(sender, id, request, signal);
     return id;
+  }
+
+  translateSelection(sender: WebContents, request: SelectionTranslationRequest): string {
+    const id = randomUUID();
+    const signal = this.coordinator.begin("selection-translation", id);
+    void this.runSelection(sender, id, request, signal);
+    return id;
+  }
+
+  private async runSelection(sender: WebContents, requestId: string, request: SelectionTranslationRequest, signal: AbortSignal): Promise<void> {
+    const emit = (event: TranslationEvent): void => {
+      if (this.coordinator.isActive(requestId) && !sender.isDestroyed()) sender.send(IPC_CHANNELS.selectionTranslationEvent, event);
+    };
+    emit({ requestId, status: "loading" });
+    try {
+      const output = await modelTaskScheduler.runInteractive(({ signal: slotSignal }) => this.engine.translate({
+        text: request.text, profileId: request.profileId, taskType: "selection", targetLanguage: "auto", signal: slotSignal,
+        onProgress: (event) => {
+          if (event.type === "segment") emit({ requestId, status: "streaming", segment: event.segment });
+        }
+      }), signal);
+      const result = createTranslationResult({
+        requestId, sourceText: output.sourceText, originalSourceText: output.originalSourceText,
+        sourceLanguage: output.sourceLanguage, targetLanguage: output.targetLanguage,
+        sourceSegments: output.sourceSegments, responseText: output.targetText, segments: output.segments,
+        cleanupActions: output.cleanupActions, modelInfo: output.modelInfo, promptVersion: output.promptVersion
+      });
+      emit({ requestId, status: "success", content: result.targetText, result });
+    } catch (error) {
+      emit({ requestId, status: signal.aborted ? "cancelled" : "error", error: signal.aborted ? "请求已取消。" : mapProviderError(error) });
+    } finally {
+      this.coordinator.end(requestId);
+    }
   }
 
   alternatives(sender: WebContents, request: SegmentAlternativeRequest): string {

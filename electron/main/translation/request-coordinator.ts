@@ -1,6 +1,7 @@
 export type RequestLane =
   | "main-translation"
   | "popup-translation"
+  | "selection-translation"
   | "segment-revision"
   | "segment-alternatives"
   | "dictionary-context";
@@ -58,4 +59,3 @@ export class RequestCoordinator {
     return [...this.active.values()].find((request) => request.requestId === requestId)?.lane;
   }
 }
-

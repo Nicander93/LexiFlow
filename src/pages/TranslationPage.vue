@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import type { DictionaryEntry, NamingResult } from "../../electron/shared/types";
 import DictionaryDrawer from "../features/translation/components/DictionaryDrawer.vue";
@@ -10,10 +10,16 @@ import WorkbenchResultHost from "../features/workbench/components/WorkbenchResul
 import { useWorkbenchResultType } from "../features/workbench/useWorkbenchResultType";
 import { useTranslationWorkspace } from "../features/translation/useTranslationWorkspace";
 import { useVocabularyBook } from "../features/vocabulary/useVocabularyBook";
+import TextSelectionActions from "../features/translation/components/TextSelectionActions.vue";
+import SelectionTranslationPanel from "../features/translation/components/SelectionTranslationPanel.vue";
+import { useSelectionTranslation } from "../features/translation/useSelectionTranslation";
 
 const workspace = useTranslationWorkspace();
+const selectionRoot = ref<HTMLElement>();
+const selectionTranslation = useSelectionTranslation(workspace.profileId);
+const { sourceText: selectedSource, state: selectionState, targetLanguage: selectionTarget, copied: selectionCopied } = selectionTranslation;
 const route = useRoute();
-const pasteGuard = ref(false);
+const readingLayout = ref<"auto" | "translation" | "bilingual">("auto");
 const vocabulary = useVocabularyBook(false);
 const {
   sourceText, mode, namingOptions, targetLanguage, maxInputLength,
@@ -25,9 +31,10 @@ const {
   beginOcrSelection, moveOcrSelection, endOcrSelection, cancelOcrSelection, setOcrImage,
   dictionaryTerm, dictionaryLoading, dictionaryError, segmentDictionary, closeDictionary, dictionaryContext,
   dictionaryContextLoading, dictionaryContextText, dictionaryContextError, requestDictionaryContext, glossaryFromDictionary, glossaryFromDictionaryNotice,
-  addDictionaryTermToGlossary, showRevisionPopover, alternativesLoading, requestAlternatives, addActiveSegmentToGlossary,
+  addDictionaryTermToGlossary, showRevisionPopover, alternativesLoading, requestAlternatives,
   revisions, lockedSegment, undoRevision, customRevisionInstruction, revisionStatus, reviseSegment, reviseWithCustomInstruction,
-  alternatives, applyAlternative, revisionError, revisionNotice
+  alternatives, applyAlternative, revisionError, revisionNotice,
+  pendingRevision, applyRevision, discardSuggestion, lastInstruction, persistRevisions, sourceDirty, translationDirty, clearInput, copyDictionaryTerm
 } = workspace;
 
 const namingResult = computed<NamingResult | null>(() => {
@@ -35,7 +42,7 @@ const namingResult = computed<NamingResult | null>(() => {
   try { return JSON.parse(displayResultText.value) as NamingResult; } catch { return null; }
 });
 const resultType = useWorkbenchResultType({
-  mode, sourceText, status, displayResultText, displaySegments, showMainDictionary, namingResult
+  mode, sourceText, status, displayResultText, displaySegments, showMainDictionary, namingResult, readingLayout
 });
 const composerCompact = computed(() => resultType.value !== "empty" && resultType.value !== "loading");
 const emptyLabel = computed(() => (mode.value === "naming" ? "开始命名吧" : "开始翻译吧"));
@@ -49,16 +56,17 @@ const dictionaryNote = computed(() => {
   return `本地词典未收录，已按翻译处理${suggestions}`;
 });
 const showOcrOverlay = computed(() => ocrLoading.value || Boolean(ocrResult.value) || Boolean(ocrError.value));
+watch(sourceText, selectionTranslation.close);
+watch(() => result.value?.requestId, selectionTranslation.close);
 
-async function handlePaste(): Promise<void> {
-  if (mode.value === "naming" || pasteGuard.value) return;
-  pasteGuard.value = true;
-  try {
-    await nextTick();
-    if (sourceText.value.trim()) await triggerAiTranslate();
-  } finally {
-    window.setTimeout(() => { pasteGuard.value = false; }, 300);
-  }
+function translateSelection(text: string): void {
+  closeDictionary();
+  clearSegmentLock();
+  void selectionTranslation.start(text);
+}
+function lookupSelection(text: string, segmentId?: string): void {
+  selectionTranslation.close();
+  void lookupDictionary(text, segmentId);
 }
 
 function setMode(value: "normal" | "naming"): void {
@@ -70,7 +78,8 @@ function onOcrRequest(): void { void captureOcr(); }
 
 function handlePageKeydown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
-  if (dictionaryTerm.value) closeDictionary();
+  if (selectedSource.value) selectionTranslation.close();
+  else if (dictionaryTerm.value) closeDictionary();
   else if (lockedSegment.value) clearSegmentLock();
 }
 
@@ -91,7 +100,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="workbench-page">
+  <div ref="selectionRoot" class="workbench-page">
+    <TextSelectionActions :root="selectionRoot" :max-length="maxInputLength" @translate="translateSelection" @dictionary="lookupSelection" />
     <OcrCaptureOverlay
       v-if="showOcrOverlay"
       :result="ocrResult"
@@ -122,8 +132,7 @@ onUnmounted(() => {
       @update:naming-options="namingOptions = $event"
       @update:target-language="targetLanguage = $event"
       @submit="triggerAiTranslate"
-      @paste="handlePaste"
-      @clear="sourceText = ''"
+      @clear="clearInput"
     />
 
     <div v-if="cleanupNotice" class="cleanup-notice">
@@ -136,6 +145,15 @@ onUnmounted(() => {
     <p v-if="vocabulary.notice.value" class="vocabulary-notice" role="status">{{ vocabulary.notice.value }} <a href="#/vocabulary">打开单词本</a></p>
     <p v-if="vocabulary.error.value" class="error-text" role="alert">{{ vocabulary.error.value }}</p>
 
+    <div v-if="translationDirty && displayResultText" class="draft-notice" role="status">
+      <span>{{ sourceDirty ? '原文已修改，译文待更新' : '目标语言已修改，译文待更新' }}。以下保留上次译文。</span>
+      <button class="text-button" type="button" @click="triggerAiTranslate">更新翻译</button>
+    </div>
+    <div v-if="mode !== 'naming' && status === 'success' && displaySegments.length && !showMainDictionary" class="reading-layout" role="group" aria-label="阅读布局">
+      <button type="button" :aria-pressed="resultType === 'translation'" @click="readingLayout = 'translation'">仅译文</button>
+      <button type="button" :aria-pressed="resultType === 'bilingual'" @click="readingLayout = 'bilingual'">双语对照</button>
+    </div>
+
     <WorkbenchResultHost
       :result-type="resultType"
       :empty-label="emptyLabel"
@@ -143,13 +161,14 @@ onUnmounted(() => {
       :dictionary-entry="autoDictionaryResult?.entry"
       :naming-result="namingResult"
       :display-result-text="displayResultText"
-      :source-text="sourceText"
+      :source-text="result?.sourceText ?? sourceText"
       :status="status"
       :error-message="errorMessage"
       :warning-message="warningMessage"
       :segments="displaySegments"
       :active-segment-id="activeSegmentId"
       :copied="copied"
+      :adjustable="!translationDirty && status === 'success'"
       :dictionary-note="dictionaryNote"
       :source-language="result?.sourceLanguage"
       :target-language="result?.targetLanguage ?? (targetLanguage === 'auto' ? undefined : targetLanguage)"
@@ -168,6 +187,12 @@ onUnmounted(() => {
       @save-word="saveWord"
     />
 
+    <SelectionTranslationPanel
+      v-if="selectedSource"
+      :source-text="selectedSource" :state="selectionState" :target-language="selectionTarget" :copied="selectionCopied"
+      @close="selectionTranslation.close" @cancel="selectionTranslation.cancel"
+      @retry="selectionTranslation.start(selectedSource)" @copy="selectionTranslation.copy"
+    />
     <DictionaryDrawer
       :term="dictionaryTerm"
       :loading="dictionaryLoading"
@@ -181,7 +206,9 @@ onUnmounted(() => {
       :target-term="glossaryFromDictionary.targetTerm"
       :notice="glossaryFromDictionaryNotice"
       @close="closeDictionary"
-      @ai-translate="triggerAiTranslate"
+      @copy-term="copyDictionaryTerm"
+      @translate-term="translateSelection"
+      @lookup-term="(term) => lookupDictionary(term, dictionaryContext?.id)"
       @request-context="requestDictionaryContext"
       @update:source-term="glossaryFromDictionary.sourceTerm = $event"
       @update:target-term="glossaryFromDictionary.targetTerm = $event"
@@ -190,6 +217,7 @@ onUnmounted(() => {
     />
     <SegmentActionPopover
       v-if="showRevisionPopover"
+      :key="lockedSegment?.id"
       :locked-segment="lockedSegment"
       :revisions="revisions"
       :alternatives-loading="alternativesLoading"
@@ -198,14 +226,18 @@ onUnmounted(() => {
       :revision-notice="revisionNotice"
       :custom-instruction="customRevisionInstruction"
       :alternatives="alternatives"
+      :pending-revision="pendingRevision"
+      :last-instruction="lastInstruction"
       @request-alternatives="requestAlternatives"
-      @add-to-glossary="addActiveSegmentToGlossary"
       @undo="undoRevision"
       @close="clearSegmentLock"
       @revise="reviseSegment"
       @update:custom-instruction="customRevisionInstruction = $event"
       @revise-custom="reviseWithCustomInstruction"
       @apply-alternative="applyAlternative"
+      @apply-revision="applyRevision"
+      @discard-suggestion="discardSuggestion"
+      @save-history="persistRevisions"
     />
   </div>
 </template>
@@ -224,4 +256,8 @@ onUnmounted(() => {
 .original-text { max-height: 100px; overflow: auto; padding: 9px; border-radius: 8px; background: var(--surface-soft); }
 .vocabulary-notice { margin: 0 4px; color: var(--accent-strong); font-size: 12px; }
 .vocabulary-notice a { color: inherit; font-weight: 600; }
+.draft-notice { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border-radius: 8px; background: var(--accent-faint); color: var(--ink-soft); font-size: 12px; }
+.reading-layout { display: flex; justify-content: flex-end; gap: 4px; }
+.reading-layout button { border: 0; border-radius: 6px; padding: 5px 10px; background: transparent; color: var(--ink-soft); cursor: pointer; font-size: 12px; }
+.reading-layout button[aria-pressed="true"] { color: var(--accent-strong); background: var(--accent-soft); }
 </style>

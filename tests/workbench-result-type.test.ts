@@ -3,6 +3,16 @@ import { resolveWorkbenchResultType } from "../electron/shared/workbench-result"
 import type { NamingResult, TranslationSegment } from "../electron/shared/types";
 
 describe("resolveWorkbenchResultType", () => {
+  it("honors the selected reading layout even for a single short sentence", () => {
+    const input = {
+      mode: "normal" as const, sourceText: "A short sentence.", status: "success" as const,
+      displayResultText: "短句。", displaySegments: [{ id: "1", source: "A short sentence.", target: "短句。", sourceStart: 0, sourceEnd: 17 }],
+      showMainDictionary: false, namingResult: null
+    };
+    expect(resolveWorkbenchResultType({ ...input, readingLayout: "bilingual" })).toBe("bilingual");
+    expect(resolveWorkbenchResultType({ ...input, sourceText: "x".repeat(300), readingLayout: "translation" })).toBe("translation");
+    expect(resolveWorkbenchResultType({ ...input, status: "streaming", readingLayout: "bilingual" })).toBe("loading");
+  });
   it("keeps empty state when idle without source", () => {
     expect(resolveWorkbenchResultType({
       mode: "normal",

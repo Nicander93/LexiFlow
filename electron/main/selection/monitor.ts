@@ -34,7 +34,8 @@ export class SelectionMonitor {
     private readonly capture: () => Promise<CapturedSelection>,
     private readonly onSelection: (text: string, point: SelectionPoint) => void,
     private readonly onPointerDown: (point: SelectionPoint) => void = () => undefined,
-    private readonly normalizePoint: (point: SelectionPoint) => SelectionPoint = (point) => point
+    private readonly normalizePoint: (point: SelectionPoint) => SelectionPoint = (point) => point,
+    private readonly shouldCapture: () => boolean = () => true
   ) {}
 
   private readonly handleMouseDown = (event: GlobalMouseEvent): void => {
@@ -48,12 +49,12 @@ export class SelectionMonitor {
     if (event.button !== 1 || !this.dragStart) return;
     const distance = Math.hypot(event.x - this.dragStart.x, event.y - this.dragStart.y);
     this.dragStart = undefined;
-    if (distance < 6) return;
+    if (distance < 6 || !this.shouldCapture()) return;
 
     const sequence = ++this.captureSequence;
     const point = this.normalizePoint({ x: event.x, y: event.y });
     void this.capture().then((result) => {
-      if (!this.running || sequence !== this.captureSequence || !result.text.trim()) return;
+      if (!this.running || sequence !== this.captureSequence || !this.shouldCapture() || !result.text.trim()) return;
       this.onSelection(result.text, point);
     });
   };

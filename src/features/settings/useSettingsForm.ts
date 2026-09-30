@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, shallowRef, type ShallowRef } from "vue";
-import type { AppSettings, ProviderModel, SettingsPatch, TranslationProfile } from "../../../electron/shared/types";
+import type { AppSettings, ProviderModel, SettingsPatch, ShortcutRegistrationResult, TranslationProfile } from "../../../electron/shared/types";
 import { toIpcPayload } from "../../../electron/shared/serialization";
 import { getTranslatorApi } from "../../platform/translator";
 
@@ -12,6 +12,7 @@ export interface SettingsForm {
   loading: ShallowRef<boolean>;
   saving: ShallowRef<boolean>;
   apiKeyConfigured: ShallowRef<boolean>;
+  shortcutStatus: ShallowRef<ShortcutRegistrationResult | undefined>;
   loadSettings: () => Promise<void>;
   saveCurrent: (options?: { notify?: boolean; apiKey?: string }) => Promise<boolean>;
   saveProvider: (apiKey: string) => Promise<boolean>;
@@ -59,6 +60,7 @@ export function useSettingsForm(notify: Notify): SettingsForm {
   const loading = shallowRef(true);
   const saving = shallowRef(false);
   const apiKeyConfigured = shallowRef(false);
+  const shortcutStatus = shallowRef<ShortcutRegistrationResult>();
   let saveQueue: Promise<boolean> = Promise.resolve(true);
 
   function replaceSettings(value: AppSettings): void {
@@ -73,6 +75,12 @@ export function useSettingsForm(notify: Notify): SettingsForm {
 
   function handleSettingsUpdated(event: Event): void {
     acceptSettings((event as CustomEvent<AppSettings>).detail);
+    void refreshShortcutStatus();
+  }
+
+  async function refreshShortcutStatus(): Promise<void> {
+    try { shortcutStatus.value = (await translator.runtime.ping()).shortcutStatus; }
+    catch { shortcutStatus.value = undefined; }
   }
 
   onMounted(() => window.addEventListener("lexiflow:settings-updated", handleSettingsUpdated));
@@ -87,6 +95,7 @@ export function useSettingsForm(notify: Notify): SettingsForm {
       ]);
       acceptSettings(loaded);
       profiles.value = loadedProfiles;
+      await refreshShortcutStatus();
     } finally {
       loading.value = false;
     }
@@ -125,6 +134,7 @@ export function useSettingsForm(notify: Notify): SettingsForm {
         notify(error instanceof Error ? error.message : "设置保存失败。", "error");
         return false;
       } finally {
+        await refreshShortcutStatus();
         saving.value = false;
       }
     });
@@ -149,6 +159,7 @@ export function useSettingsForm(notify: Notify): SettingsForm {
     loading,
     saving,
     apiKeyConfigured,
+    shortcutStatus,
     loadSettings,
     saveCurrent,
     saveProvider,

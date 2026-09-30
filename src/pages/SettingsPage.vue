@@ -80,6 +80,7 @@ onMounted(async () => {
         v-else-if="category === 'selection'"
         :settings="form.settings.value"
         :profiles="form.profiles.value"
+        :shortcut-status="form.shortcutStatus.value"
         @save="save"
         @error="notify($event, 'error')"
       />

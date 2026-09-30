@@ -3,6 +3,21 @@ import { DEFAULT_SETTINGS } from "../electron/shared/defaults";
 import { TranslationEngine } from "../electron/main/application/translation/translation-engine";
 
 describe("TranslationEngine", () => {
+  it("retains the remote permission gate for selection translation", async () => {
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.provider.type = "openai-compatible";
+    settings.provider.remoteUsageConfirmed = true;
+    let gatewayCreated = false;
+    const engine = new TranslationEngine({
+      getSettings: () => settings,
+      getProfile: () => ({ id: "private", targetLanguage: "zh-CN", allowRemote: false } as never),
+      matchGlossary: () => ({}),
+      createGateway: () => { gatewayCreated = true; throw new Error("should not create gateway"); }
+    });
+    await expect(engine.translate({ text: "private selection", profileId: "private", taskType: "selection", targetLanguage: "auto", signal: new AbortController().signal })).rejects.toThrow("禁止将内容发送给远程模型");
+    expect(gatewayCreated).toBe(false);
+  });
+
   it("可在不启动 Electron 的情况下处理文档分块并解析结构化结果", async () => {
     const engine = new TranslationEngine({
       getSettings: () => structuredClone(DEFAULT_SETTINGS),

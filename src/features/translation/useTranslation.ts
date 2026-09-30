@@ -71,6 +71,17 @@ export function useTranslation() {
     lastRequest = undefined;
   }
 
+  function restore(restoredResult: TranslationResult, restoredHistoryId?: string): void {
+    stop();
+    reducerState = { requestId: restoredResult.requestId, status: "success", content: restoredResult.targetText, result: restoredResult, historyId: restoredHistoryId };
+    status.value = "success";
+    resultText.value = restoredResult.targetText;
+    result.value = restoredResult;
+    historyId.value = restoredHistoryId;
+    errorMessage.value = "";
+    warningMessage.value = "";
+  }
+
   async function retry(): Promise<void> {
     if (lastRequest) await start(lastRequest);
   }
@@ -82,5 +93,5 @@ export function useTranslation() {
     removeListener();
   });
 
-  return { status, resultText, result, errorMessage, warningMessage, historyId, isRunning, start, stop, retry, reset };
+  return { status, resultText, result, errorMessage, warningMessage, historyId, isRunning, start, stop, retry, reset, restore };
 }

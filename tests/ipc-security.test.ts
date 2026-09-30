@@ -27,6 +27,12 @@ describe("IPC Sender 校验", () => {
 });
 
 describe("IPC DTO 运行时校验", () => {
+  it("accepts empty shortcut bindings while retaining type and profile validation", () => {
+    expect(parseSettingsPatch({ type: "update-shortcuts", value: { translation: "", naming: "", screenshot: "" } })).toMatchObject({ value: { translation: "" } });
+    expect(() => parseSettingsPatch({ type: "update-shortcuts", value: { translation: false } })).toThrow();
+    expect(() => parseSettingsPatch({ type: "update-shortcuts", value: { defaultTranslationProfileId: "" } })).toThrow();
+  });
+
   it("拒绝非法翻译枚举、空文本和越界 OCR 选区", () => {
     expect(() => parseTranslationRequest({ text: "hello", mode: "unknown", targetLanguage: "en" })).toThrow();
     expect(() => parseTranslationRequest({ text: "", mode: "normal", targetLanguage: "en" })).toThrow();

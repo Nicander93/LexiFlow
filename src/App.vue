@@ -11,7 +11,7 @@ const route = useRoute();
 const router = useRouter();
 const translator = getTranslatorApi();
 const shell = computed(() => (route.meta.shell as string | undefined) ?? (route.meta.popup ? "popup" : "workbench"));
-const { historyOpen, workbenchMode, openHistory, closeHistory, setMode } = useWorkbenchUi();
+const { historyOpen, workbenchMode, openHistory, closeHistory, setMode, restoreHistory } = useWorkbenchUi();
 const secondaryTitle = computed(() => {
   if (route.path.startsWith("/settings")) return "LexiFlow · 设置";
   if (route.path.startsWith("/documents")) return "LexiFlow · 文档翻译";
@@ -52,7 +52,7 @@ onUnmounted(() => removeNavigateListener?.());
       v-if="shell === 'workbench'"
       :open="historyOpen"
       @close="closeHistory"
-      @restore="closeHistory"
+      @restore="restoreHistory"
     />
   </div>
 </template>

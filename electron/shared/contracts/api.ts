@@ -4,7 +4,7 @@ import type { DictionaryContextEvent, DictionaryContextRequest, DictionaryLookup
 import type { GlossaryConflict, GlossaryEntry, GlossaryExportResult, GlossaryImportResult } from "./glossary";
 import type { PopupPayload } from "./window";
 import type { ProviderHealth, ProviderModel, RuntimeInfo, SelectionResult, ShortcutRegistrationResult } from "./runtime";
-import type { SegmentAlternativeEvent, SegmentAlternativeRequest, SegmentRevisionEvent, SegmentRevisionRequest, TranslationEvent, TranslationProfile, TranslationRequest, TranslationSession } from "./translation";
+import type { SegmentAlternativeEvent, SegmentAlternativeRequest, SegmentRevisionEvent, SegmentRevisionRequest, SelectionTranslationRequest, TranslationEvent, TranslationProfile, TranslationRequest, TranslationSession } from "./translation";
 import type { DocumentExportRequest, DocumentImportRequest, DocumentTaskEvent, DocumentTaskRecord } from "./document";
 import type { HistoryRevisionUpdate, TranslationHistory } from "./history";
 import type { VocabularyEntry, VocabularyUpsertInput } from "./vocabulary";
@@ -25,6 +25,7 @@ export interface TranslatorApi {
     onEvent: (listener: (event: TranslationEvent) => void) => () => void;
   };
   revision: { start: (request: SegmentRevisionRequest) => Promise<string>; cancel: (requestId?: string) => void; onEvent: (listener: (event: SegmentRevisionEvent) => void) => () => void };
+  selectionTranslation: { start: (request: SelectionTranslationRequest) => Promise<string>; cancel: (requestId: string) => void; onEvent: (listener: (event: TranslationEvent) => void) => () => void };
   alternatives: { start: (request: SegmentAlternativeRequest) => Promise<string>; cancel: (requestId?: string) => void; onEvent: (listener: (event: SegmentAlternativeEvent) => void) => () => void };
   selection: { capture: () => Promise<SelectionResult>; triggerTip: () => void; dismissTip: () => void };
   history: {

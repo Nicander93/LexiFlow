@@ -3,7 +3,7 @@
  * 退出时取消模型请求；history.retention === clear-on-exit 时先清历史再真正退出。
  * 托盘应用：window-all-closed 不得结束进程。
  */
-import { app, clipboard, Menu, screen } from "electron";
+import { app, BrowserWindow, clipboard, Menu, screen } from "electron";
 import type { AppSettings, TranslationMode } from "../../shared/types";
 import { captureSelectedText } from "../clipboard/selection";
 import { RuntimeService } from "../application/runtime/runtime-service";
@@ -77,7 +77,7 @@ export async function bootstrapApplication(): Promise<void> {
   const documentManager = new DocumentManager(documentStore, profileStore, settingsStore, glossaryStore, translationEngine, createGateway);
   const ocrService = new WindowsOcrService();
   const runtimeService = new RuntimeService({
-    runtimeInfo: () => ({ apiVersion: 2, electron: process.versions.electron, platform: process.platform }),
+    runtimeInfo: () => ({ apiVersion: 2, electron: process.versions.electron, platform: process.platform, shortcutStatus: hotkeyManager.getStatus() }),
     providerHealth: () => createProvider(settingsStore.get()).healthCheck(),
     providerModels: () => createProvider(settingsStore.get()).getModels(),
     captureSelection: () => captureSelectedText(settingsStore.get().translation.maxInputLength),
@@ -132,6 +132,7 @@ export async function bootstrapApplication(): Promise<void> {
   const selectionController = new SelectionController({
     hook: createGlobalMouseHook(),
     capture: () => captureSelectedText(settingsStore.get().translation.maxInputLength),
+    shouldCapture: () => !BrowserWindow.getAllWindows().some((window) => window.isFocused() || window.webContents.isDevToolsFocused()),
     normalizePoint: (point) => screen.screenToDipPoint(point),
     showTip: (point) => void windowManager.showSelectionTip(point),
     hideTip: () => windowManager.hideSelectionTip(),
@@ -149,9 +150,8 @@ export async function bootstrapApplication(): Promise<void> {
   const applyStartup = (settings: AppSettings): void => {
     app.setLoginItemSettings({ openAtLogin: settings.startup.enabled });
   };
-  const applyShortcuts = (settings: AppSettings) => {
-    const shortcutResult = hotkeyManager.register(settings.shortcuts);
-    if (shortcutResult.errors.length) return shortcutResult;
+  const applyShortcuts = (settings: AppSettings, options?: { allowPartial?: boolean }) => {
+    const shortcutResult = hotkeyManager.register(settings.shortcuts, options);
     try {
       selectionController.setEnabled(settings.shortcuts.enableSelectionTranslation);
     } catch {

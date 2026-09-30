@@ -1,11 +1,11 @@
 import { IPC_CHANNELS } from "../../../shared/types";
 import { parseBoolean, parseRoute, parseString } from "../../ipc/validation";
-import { registerOn } from "./helpers";
+import { registerInvoke, registerOn } from "./helpers";
 import type { IpcDependencies } from "./types";
 
 export function registerWindowIpc(dependencies: IpcDependencies): void {
   const { windowManager, translationManager } = dependencies;
-  registerOn(IPC_CHANNELS.clipboardWrite, (_event, text: string) => dependencies.clipboardWrite(parseString(text, "剪贴板内容", 100_000)));
+  registerInvoke(IPC_CHANNELS.clipboardWrite, (_event, text: string) => dependencies.clipboardWrite(parseString(text, "剪贴板内容", 100_000)));
   registerOn(IPC_CHANNELS.windowOpenMain, (_event, route?: string) => {
     void (async () => {
       const mainWindow = await windowManager.showMainWindow(parseRoute(route));

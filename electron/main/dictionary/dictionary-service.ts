@@ -7,6 +7,7 @@ import { resolveDictionaryDatabasePath } from "./dictionary-path";
 import { EcdictRepository, type DictionaryRepository } from "./ecdict-repository";
 import { normalizeDictionaryQuery, stripWordKey } from "./normalize-query";
 import { toDictionaryEntry } from "./parse-entry";
+import { shouldLookupDictionary } from "../../shared/dictionary-eligibility";
 
 const MAX_QUERY_LENGTH = 128;
 
@@ -43,7 +44,7 @@ export class DictionaryService {
       suggestions: []
     };
 
-    if (!normalizedQuery) return empty;
+    if (!normalizedQuery || !shouldLookupDictionary(normalizedQuery)) return empty;
 
     const status = this.repository.getStatus();
     if (!status.available) {

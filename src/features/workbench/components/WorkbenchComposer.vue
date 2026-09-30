@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { NamingOptions, TargetLanguage } from "../../../../electron/shared/types";
 import UiSelect from "../../../components/UiSelect.vue";
+import { computed } from "vue";
+import { detectLanguage, resolveTargetLanguage } from "../../../../electron/shared/language";
 
 const props = defineProps<{
   sourceText: string;
@@ -26,9 +28,12 @@ function patchNaming(patch: Partial<NamingOptions>): void {
 }
 
 const languageOptions = [
+  { value: "auto", label: "自动互译" },
   { value: "zh-CN", label: "中文" },
   { value: "en", label: "英文" }
 ];
+const sourceLanguageLabel = computed(() => props.sourceText.trim() ? (detectLanguage(props.sourceText) === "en" ? "英文" : "中文") : "中英");
+const targetLanguageLabel = computed(() => resolveTargetLanguage(props.sourceText, props.targetLanguage) === "en" ? "英文" : "中文");
 const namingTypeOptions = [
   { value: "variable", label: "变量名" },
   { value: "boolean", label: "布尔变量" },
@@ -43,19 +48,22 @@ const namingStyleOptions = ["camelCase", "PascalCase", "snake_case", "kebab-case
 <template>
   <section class="workbench-composer" :class="{ compact, naming: mode === 'naming' }">
     <div v-if="mode !== 'naming'" class="language-row">
-      <span>自动</span>
+      <span>{{ sourceLanguageLabel }}</span>
       <span aria-hidden="true">→</span>
       <UiSelect
         class="language-select"
-        :model-value="targetLanguage === 'en' ? 'en' : 'zh-CN'"
+        :model-value="targetLanguage"
         :options="languageOptions"
         label="目标语言"
         @update:model-value="emit('update:targetLanguage', $event as TargetLanguage)"
       />
+      <small v-if="targetLanguage === 'auto' && sourceText.trim()" class="language-direction">译为{{ targetLanguageLabel }}</small>
     </div>
     <textarea
       :value="sourceText"
       autofocus
+      aria-label="原文输入"
+      data-selection-text
       :maxlength="maxInputLength"
       :placeholder="mode === 'naming' ? '描述你想命名的内容' : '输入或粘贴文本'"
       @input="emit('update:sourceText', ($event.target as HTMLTextAreaElement).value)"
@@ -74,7 +82,7 @@ const namingStyleOptions = ["camelCase", "PascalCase", "snake_case", "kebab-case
       <span v-else-if="sourceText" class="input-count">{{ sourceText.length.toLocaleString() }} / {{ maxInputLength.toLocaleString() }}</span>
       <div class="composer-actions">
         <button v-if="sourceText" class="clear-input" type="button" aria-label="清空输入" @click="emit('clear')">×</button>
-        <button class="send-button" type="button" :disabled="isRunning" :aria-label="mode === 'naming' ? '生成名称' : '开始翻译'" @click="emit('submit')">↗</button>
+        <button class="send-button" type="button" :disabled="isRunning || !sourceText.trim()" :aria-label="mode === 'naming' ? '生成名称' : '开始翻译'" :title="mode === 'naming' ? '生成名称（Ctrl+Enter）' : '翻译（Ctrl+Enter）'" @click="emit('submit')">{{ isRunning ? '…' : '↗' }}</button>
       </div>
     </div>
   </section>
@@ -92,7 +100,8 @@ const namingStyleOptions = ["camelCase", "PascalCase", "snake_case", "kebab-case
   display: flex; align-items: center; gap: 8px; padding: 10px 14px 0;
   color: var(--muted); font-size: 13px;
 }
-.language-select { width: 82px; }
+.language-select { width: 108px; }
+.language-direction { color: var(--muted); font-size: 11px; }
 .language-select :deep(.ui-select__trigger) { min-height: 27px; padding: 2px 8px; border: 0; background: transparent; color: var(--ink-soft); font-size: 13px; box-shadow: none; }
 .workbench-composer textarea {
   flex: 1; min-height: 56px; max-height: 28vh; padding: 10px 14px 4px;

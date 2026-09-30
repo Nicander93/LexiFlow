@@ -1,5 +1,5 @@
 import { IPC_CHANNELS, type DictionaryContextRequest, type SegmentAlternativeRequest, type SegmentRevisionRequest, type TranslationRequest } from "../../../shared/types";
-import { parseDictionaryContextRequest, parseId, parseSegmentAlternativeRequest, parseSegmentRevisionRequest, parseTranslationRequest } from "../../ipc/validation";
+import { parseDictionaryContextRequest, parseId, parseSegmentAlternativeRequest, parseSegmentRevisionRequest, parseSelectionTranslationRequest, parseTranslationRequest } from "../../ipc/validation";
 import { registerInvoke, registerOn } from "./helpers";
 import type { IpcDependencies } from "./types";
 
@@ -13,6 +13,8 @@ export function registerTranslationIpc(dependencies: IpcDependencies): void {
     return translationManager.openHistorySession(mainWindow.webContents, id);
   });
   registerInvoke(IPC_CHANNELS.translationStart, (event, request: TranslationRequest) => translationManager.start(event.sender, parseTranslationRequest(request)));
+  registerInvoke(IPC_CHANNELS.selectionTranslationStart, (event, request: unknown) => translationManager.translateSelection(event.sender, parseSelectionTranslationRequest(request)));
+  registerOn(IPC_CHANNELS.selectionTranslationCancel, (_event, requestId: string) => translationManager.cancel(parseId(requestId, "请求 ID")));
   registerOn(IPC_CHANNELS.translationCancel, (_event, requestId?: string) => translationManager.cancel(requestId === undefined ? undefined : parseId(requestId, "请求 ID")));
   registerInvoke(IPC_CHANNELS.revisionStart, (event, request: SegmentRevisionRequest) => translationManager.revise(event.sender, parseSegmentRevisionRequest(request)));
   registerOn(IPC_CHANNELS.revisionCancel, (_event, requestId?: string) => translationManager.cancel(requestId === undefined ? undefined : parseId(requestId, "请求 ID")));

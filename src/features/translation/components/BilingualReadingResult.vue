@@ -9,11 +9,14 @@ defineProps<{
   activeSegmentId?: string;
   sourceLanguage?: string;
   targetLanguage?: string;
+  adjustable?: boolean;
+  copied?: boolean;
 }>();
 
 const emit = defineEmits<{
   "copy-source": [];
   copy: [];
+  "copy-bilingual": [];
   hover: [id: string | undefined];
   toggle: [id: string];
   clear: [];
@@ -25,7 +28,7 @@ const emit = defineEmits<{
 <template>
   <section class="bilingual-reading">
     <div>
-      <header><span>原文</span><span><SpeechButton :text="segments.map((item) => item.source).join(' ')" :language="sourceLanguage" icon-only label="朗读原文" /><button type="button" @click="emit('copy-source')"><AppIcon name="copy" :size="14" /></button></span></header>
+      <header><span>原文</span><span><SpeechButton :text="segments.map((item) => item.source).join(' ')" :language="sourceLanguage" icon-only label="朗读原文" /><button type="button" aria-label="复制原文" title="复制原文" @click="emit('copy-source')"><AppIcon name="copy" :size="14" /></button></span></header>
       <SegmentedText
         side="source"
         :segments="segments"
@@ -34,12 +37,14 @@ const emit = defineEmits<{
         @toggle="emit('toggle', $event)"
         @clear="emit('clear')"
         @navigate="emit('navigate', $event)"
+        @select-term="(term, id) => emit('select-term', term, id)"
       />
     </div>
     <div>
-      <header><span>译文</span><span><SpeechButton :text="segments.map((item) => item.target).join(' ')" :language="targetLanguage" icon-only label="朗读译文" /><button type="button" @click="emit('copy')"><AppIcon name="copy" :size="14" /></button></span></header>
+      <header><span>译文</span><span><SpeechButton :text="segments.map((item) => item.target).join(' ')" :language="targetLanguage" icon-only label="朗读译文" /><button type="button" aria-label="复制双语" title="复制双语" @click="emit('copy-bilingual')"><AppIcon name="bilingual" :size="14" /></button><button type="button" aria-label="复制译文" title="复制译文" @click="emit('copy')"><AppIcon :name="copied ? 'check' : 'copy'" :size="14" /></button></span></header>
       <SegmentedText
         side="target"
+        :adjustable="adjustable"
         :segments="segments"
         :active-id="activeSegmentId"
         @hover="emit('hover', $event)"

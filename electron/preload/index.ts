@@ -30,6 +30,7 @@ import {
   type SegmentAlternativeEvent,
   type SegmentAlternativeRequest,
   type SelectionResult,
+  type SelectionTranslationRequest,
   type ShortcutRegistrationResult,
   type TranslationEvent,
   type TranslationHistory,
@@ -74,6 +75,11 @@ const api = {
     cancel: (requestId?: string): void => ipcRenderer.send(IPC_CHANNELS.translationCancel, requestId),
     onEvent: (listener: (event: TranslationEvent) => void): (() => void) =>
       on(IPC_CHANNELS.translationEvent, listener)
+  },
+  selectionTranslation: {
+    start: (request: SelectionTranslationRequest): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.selectionTranslationStart, request),
+    cancel: (requestId: string): void => ipcRenderer.send(IPC_CHANNELS.selectionTranslationCancel, requestId),
+    onEvent: (listener: (event: TranslationEvent) => void): (() => void) => on(IPC_CHANNELS.selectionTranslationEvent, listener)
   },
   revision: {
     start: (request: SegmentRevisionRequest): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.revisionStart, request),

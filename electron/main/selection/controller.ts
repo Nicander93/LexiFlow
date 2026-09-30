@@ -8,6 +8,7 @@ interface SelectionControllerOptions {
   hideTip: () => void;
   isTipPoint: (point: SelectionPoint) => boolean;
   onConfirm: (text: string) => void;
+  shouldCapture?: () => boolean;
 }
 
 /**
@@ -29,7 +30,8 @@ export class SelectionController {
         if (options.isTipPoint(point)) return;
         this.dismiss();
       },
-      options.normalizePoint
+      options.normalizePoint,
+      options.shouldCapture
     );
   }
 

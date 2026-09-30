@@ -7,15 +7,50 @@ import { usePopupWorkflow } from "../features/translation/usePopupWorkflow";
 import SpeechButton from "../features/speech/SpeechButton.vue";
 import type { DictionaryEntry } from "../../electron/shared/types";
 import { useVocabularyBook } from "../features/vocabulary/useVocabularyBook";
+import { onMounted, onUnmounted, watch } from "vue";
+import { getTranslatorApi } from "../platform/translator";
+import { useDictionary } from "../features/dictionary/useDictionary";
+import { useSelectionTranslation } from "../features/translation/useSelectionTranslation";
+import TextSelectionActions from "../features/translation/components/TextSelectionActions.vue";
+import SelectionTranslationPanel from "../features/translation/components/SelectionTranslationPanel.vue";
 
 const popup = usePopupWorkflow();
 const vocabulary = useVocabularyBook(false);
+const selectionTranslation = useSelectionTranslation(popup.profileId);
+const { sourceText: selectedSource, state: selectionState, targetLanguage: selectionTarget, copied: selectionCopied } = selectionTranslation;
+const { currentQuery: selectedTerm, result: selectedDictionary, status: selectedDictionaryStatus, lookupImmediate, reset: resetSelectedDictionary } = useDictionary(0);
 const {
   popupView, sourceText, captureError, capturing, pinned, copied, popupShell, status, result, errorMessage,
   warningMessage, isRunning, retry, displayResult, namingResult, activeSegmentId, hasStructuredResult,
-  dictionaryResult, run, triggerAiTranslate, copy, close, togglePin, openMain, handleSegmentHover,
+  dictionaryResult, run, triggerAiTranslate, copy, close: closePopup, togglePin, openMain, handleSegmentHover,
   toggleSegment, clearSegmentLock, navigateSegment, stop
 } = popup;
+
+function translateSelection(text: string): void {
+  resetSelectedDictionary();
+  void selectionTranslation.start(text);
+}
+function lookupSelection(text: string): void {
+  selectionTranslation.close();
+  void lookupImmediate(text);
+}
+function resetSelection(): void { selectionTranslation.close(); resetSelectedDictionary(); }
+function close(): void { resetSelection(); closePopup(); }
+function handleSelectionEscape(event: KeyboardEvent): void {
+  if (event.key !== "Escape" || (!selectedSource.value && !selectedTerm.value)) return;
+  event.stopImmediatePropagation();
+  resetSelection();
+}
+watch(sourceText, resetSelection);
+let removePayloadListener: (() => void) | undefined;
+onMounted(() => {
+  document.addEventListener("keydown", handleSelectionEscape, true);
+  removePayloadListener = getTranslatorApi().window.onPopupPayload(resetSelection);
+});
+onUnmounted(() => {
+  document.removeEventListener("keydown", handleSelectionEscape, true);
+  removePayloadListener?.();
+});
 
 function saveWord(entry: DictionaryEntry): void {
   void vocabulary.saveDictionaryEntry(entry, sourceText.value);
@@ -24,6 +59,7 @@ function saveWord(entry: DictionaryEntry): void {
 
 <template>
   <div ref="popupShell" class="popup-shell popup-vnext">
+    <TextSelectionActions :root="popupShell" @translate="translateSelection" @dictionary="lookupSelection" />
     <header class="popup-header drag-region">
       <span class="popup-brand"><BrandLogo compact /></span>
       <div class="popup-window-actions no-drag">
@@ -34,11 +70,11 @@ function saveWord(entry: DictionaryEntry): void {
     <section v-if="capturing" class="popup-state"><span class="spinner" />正在读取选中文字</section>
     <section v-else-if="captureError" class="popup-manual">
       <p>{{ captureError }}</p>
-      <textarea v-model="sourceText" autofocus placeholder="粘贴或输入文本" @keydown.ctrl.enter.prevent="run" />
+      <textarea v-model="sourceText" data-selection-text autofocus placeholder="粘贴或输入文本" @keydown.ctrl.enter.prevent="run" />
       <button type="button" class="primary-button" @click="run">翻译</button>
     </section>
     <template v-else>
-      <section class="popup-source-vnext"><p>{{ sourceText }}</p></section>
+      <section class="popup-source-vnext"><p data-selection-text>{{ sourceText }}</p></section>
       <section class="popup-result-vnext">
         <DictionaryCompactCard v-if="popupView === 'dictionary' && dictionaryResult?.entry" :entry="dictionaryResult.entry" @ai-translate="triggerAiTranslate" @save-word="saveWord" />
         <div v-else-if="status === 'loading'" class="popup-state"><span class="soft-loader"><i /><i /><i /></span>正在翻译</div>
@@ -53,12 +89,25 @@ function saveWord(entry: DictionaryEntry): void {
           side="target"
           :segments="result.segments"
           :active-id="activeSegmentId"
+          :adjustable="false"
           @hover="handleSegmentHover"
           @toggle="toggleSegment"
           @clear="clearSegmentLock"
           @navigate="navigateSegment"
         />
-        <pre v-else>{{ displayResult }}</pre>
+        <pre v-else data-selection-text>{{ displayResult }}</pre>
+        <SelectionTranslationPanel
+          v-if="selectedSource"
+          :source-text="selectedSource" :state="selectionState" :target-language="selectionTarget" :copied="selectionCopied"
+          @close="selectionTranslation.close" @cancel="selectionTranslation.cancel"
+          @retry="selectionTranslation.start(selectedSource)" @copy="selectionTranslation.copy"
+        />
+        <section v-if="selectedTerm" class="popup-selected-dictionary" aria-label="选词词典">
+          <header><strong>英语词典 · {{ selectedTerm }}</strong><button type="button" aria-label="关闭选词词典" @click="resetSelectedDictionary">×</button></header>
+          <DictionaryCompactCard v-if="selectedDictionary?.entry" :entry="selectedDictionary.entry" @ai-translate="translateSelection(selectedTerm)" @save-word="saveWord" />
+          <p v-else-if="selectedDictionaryStatus === 'loading'" class="muted">正在查词…</p>
+          <p v-else class="muted">{{ selectedDictionary?.unavailableReason ?? '英语词典未收录。' }} <button class="text-button" type="button" @click="translateSelection(selectedTerm)">翻译选中内容</button></p>
+        </section>
         <p v-if="warningMessage" class="popup-warning">{{ warningMessage }}</p>
         <p v-if="vocabulary.notice.value" class="popup-vocabulary-notice">{{ vocabulary.notice.value }}</p>
       </section>
@@ -97,6 +146,9 @@ function saveWord(entry: DictionaryEntry): void {
 .popup-source-vnext p { margin: 0; white-space: pre-wrap; }
 .popup-result-vnext { flex: 1; min-height: 0; overflow: auto; color: var(--ink); font-size: 14px; line-height: 1.65; }
 .popup-result-vnext pre { margin: 0; white-space: pre-wrap; font-family: inherit; }
+.popup-selected-dictionary { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+.popup-selected-dictionary header { display: flex; justify-content: space-between; font-size: 12px; }
+.popup-selected-dictionary header button { border: 0; background: transparent; cursor: pointer; }
 .popup-result-vnext :deep(.segment-text) { padding: 0; }
 .popup-actions {
   min-height: 40px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;

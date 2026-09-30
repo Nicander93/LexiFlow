@@ -18,7 +18,9 @@ defineProps<{
 
 const emit = defineEmits<{
   (event: "close"): void;
-  (event: "ai-translate"): void;
+  (event: "copy-term"): void;
+  (event: "translate-term", text: string): void;
+  (event: "lookup-term", value: string): void;
   (event: "request-context"): void;
   (event: "update:source-term", value: string): void;
   (event: "update:target-term", value: string): void;
@@ -61,8 +63,14 @@ const emit = defineEmits<{
     <div v-else-if="error" class="state-message error-message">{{ error }}</div>
     <div v-else class="state-message state-message--stack muted">
       <span>{{ lookup?.unavailableReason || '本地词典暂未收录该词或短语。' }}</span>
-      <span v-if="lookup?.suggestions?.length" class="dictionary-hint muted">建议：{{ lookup.suggestions.join('、') }}</span>
-      <button class="secondary-button" type="button" @click="emit('ai-translate')">按文本翻译</button>
+      <span v-if="lookup?.suggestions?.length" class="dictionary-hint muted">试试：<button v-for="suggestion in lookup.suggestions" :key="suggestion" class="text-button" type="button" @click="emit('lookup-term', suggestion)">{{ suggestion }}</button></span>
+      <button class="secondary-button" type="button" @click="emit('copy-term')">复制“{{ term }}”</button>
+      <button class="secondary-button" type="button" @click="emit('translate-term', term)">翻译选中内容</button>
     </div>
   </section>
 </template>
+
+<style scoped>
+.state-message { min-height: 0; padding: 16px; }
+.state-message--stack { gap: 10px; }
+</style>

@@ -1,6 +1,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import type { DictionaryLookupResult, NamingOptions, TargetLanguage, TranslationMode, TranslationProfile, TranslationSegment } from "../../../electron/shared/types";
+import type { DictionaryContextEvent, DictionaryLookupResult, NamingOptions, TargetLanguage, TranslationMode, TranslationProfile, TranslationSegment } from "../../../electron/shared/types";
 import { shouldLookupDictionary } from "../../../electron/shared/dictionary-eligibility";
+import { assembleDisplayText } from "../../../electron/shared/text-assembly";
 import { useCopyFeedback } from "../useCopyFeedback";
 import { useDictionary } from "../dictionary/useDictionary";
 import { useOcrCapture } from "../ocr/useOcrCapture";
@@ -14,7 +15,7 @@ type ResultView = "dictionary" | "translation";
 /** Page-level workflow coordinator; the page itself remains a layout/composition shell. */
 export function useTranslationWorkspace() {
   const sourceText = ref("");
-  const { workbenchMode, setMode: setWorkbenchMode } = useWorkbenchUi();
+  const { workbenchMode, setMode: setWorkbenchMode, restoredHistory } = useWorkbenchUi();
   const mode = ref<TranslationMode>("normal");
   const namingOptions = ref<NamingOptions>({ type: "variable", style: "camelCase", language: "general" });
   const targetLanguage = ref<TargetLanguage>("zh-CN");
@@ -40,7 +41,7 @@ export function useTranslationWorkspace() {
     mode.value = profileId.value === "technical" || profileId.value === "code-comment" ? "technical" : "normal";
   }
 
-  const { status, resultText, result, errorMessage, warningMessage, historyId, isRunning, start, stop, retry, reset } = useTranslation();
+  const { status, resultText, result, errorMessage, warningMessage, historyId, isRunning, start, stop, reset, restore } = useTranslation();
   const showOriginalText = ref(false);
   const cleanupDismissed = ref(false);
   const cleanupNotice = computed(() => {
@@ -52,6 +53,9 @@ export function useTranslationWorkspace() {
   const { status: dictionaryStatus, result: autoDictionaryResult, lookup: lookupAutoDictionary, reset: resetAutoDictionary } = useDictionary(220);
   const resultView = ref<ResultView>("translation");
   const lastTranslatedSource = ref("");
+  const lastTargetLanguage = ref<TargetLanguage>("zh-CN");
+  const sourceDirty = computed(() => Boolean(lastTranslatedSource.value) && sourceText.value !== lastTranslatedSource.value);
+  const translationDirty = computed(() => sourceDirty.value || (Boolean(lastTranslatedSource.value) && targetLanguage.value !== lastTargetLanguage.value));
   const hoveredSegmentId = ref<string>();
   const lockedSegmentId = ref<string>();
   const sourceTextarea = ref<HTMLTextAreaElement>();
@@ -65,6 +69,8 @@ export function useTranslationWorkspace() {
   const dictionaryContextError = ref("");
   const dictionaryContextLoading = ref(false);
   const dictionaryContextRequestId = ref<string>();
+  let dictionaryLookupSequence = 0;
+  let earlyDictionaryContextEvents: DictionaryContextEvent[] | undefined;
   const glossaryFromDictionary = ref({ sourceTerm: "", targetTerm: "" });
   const glossaryFromDictionaryNotice = ref("");
 
@@ -72,7 +78,7 @@ export function useTranslationWorkspace() {
     const revision = [...revisions.value].reverse().find((item) => item.segmentId === segment.id);
     return revision ? { ...segment, target: revision.newTarget } : segment;
   }));
-  const displayResultText = computed(() => displaySegments.value.length ? displaySegments.value.map((segment) => segment.target).join("\n") : resultText.value);
+  const displayResultText = computed(() => displaySegments.value.length ? assembleDisplayText(displaySegments.value, result.value?.targetLanguage ?? targetLanguage.value) : resultText.value);
   const lockedSegment = computed(() => displaySegments.value.find((segment) => segment.id === lockedSegmentId.value));
 
   const {
@@ -88,7 +94,7 @@ export function useTranslationWorkspace() {
     undoRevision,
     requestAlternatives,
     applyAlternative,
-    clearRevisions
+    clearRevisions, pendingRevision, applyRevision, discardSuggestion, lastInstruction, persistRevisions
   } = useSegmentRevision({ lockedSegment, lockedSegmentId, historyId, targetLanguage, profileId, displayResultText });
 
   const {
@@ -123,8 +129,8 @@ export function useTranslationWorkspace() {
   const dictionaryEligible = computed(() => shouldLookupDictionary(sourceText.value));
   const showDictionaryPane = computed(() => dictionaryEligible.value && dictionaryStatus.value === "found" && Boolean(autoDictionaryResult.value?.entry));
   const showDictionaryTab = computed(() => dictionaryEligible.value);
-  const showRevisionPopover = computed(() => Boolean(lockedSegment.value && hasStructuredResult.value));
-  const showMainDictionary = computed(() => showDictionaryPane.value && resultView.value === "dictionary");
+  const showRevisionPopover = computed(() => Boolean(lockedSegment.value && hasStructuredResult.value && !translationDirty.value));
+  const showMainDictionary = computed(() => showDictionaryPane.value && resultView.value === "dictionary" && !(translationDirty.value && displayResultText.value));
   const dictionarySuggestions = computed(() => autoDictionaryResult.value?.suggestions ?? []);
 
   function resizeSourceTextarea(): void {
@@ -136,8 +142,8 @@ export function useTranslationWorkspace() {
 
   watch(sourceText, (value) => {
     if (lastTranslatedSource.value && value !== lastTranslatedSource.value) {
-      reset();
-      lastTranslatedSource.value = "";
+      if (isRunning.value) stop();
+      clearSegmentLock();
       closeDictionary();
     }
     void nextTick(resizeSourceTextarea);
@@ -146,10 +152,12 @@ export function useTranslationWorkspace() {
       resultView.value = "translation";
       return;
     }
+    if (translationDirty.value && displayResultText.value) return;
     lookupAutoDictionary(value);
   });
 
   watch(dictionaryStatus, (value) => {
+    if (translationDirty.value && displayResultText.value) return;
     if (!dictionaryEligible.value) {
       resultView.value = "translation";
       return;
@@ -173,8 +181,36 @@ export function useTranslationWorkspace() {
 
   watch(result, (value) => {
     if (!value?.sourceText) return;
+    const sourceWasUnchanged = sourceText.value === lastTranslatedSource.value;
     lastTranslatedSource.value = value.sourceText;
-    if (value.sourceText !== sourceText.value) sourceText.value = value.sourceText;
+    if (sourceWasUnchanged && value.sourceText !== sourceText.value) sourceText.value = value.sourceText;
+  });
+
+  watch(targetLanguage, () => {
+    clearSegmentLock();
+    closeDictionary();
+  });
+
+  watch(restoredHistory, (item) => {
+    if (!item) return;
+    clearSegmentLock();
+    closeDictionary();
+    clearRevisions();
+    resetAutoDictionary();
+    resultView.value = "translation";
+    mode.value = item.mode;
+    profileId.value = item.profileId ?? "general";
+    targetLanguage.value = item.targetLanguage === "en" ? "en" : "zh-CN";
+    lastTargetLanguage.value = targetLanguage.value;
+    lastTranslatedSource.value = item.sourceText;
+    sourceText.value = item.sourceText;
+    revisions.value = item.revisions ?? [];
+    restore({
+      requestId: crypto.randomUUID(), sourceText: item.sourceText, originalSourceText: item.originalSourceText,
+      targetText: item.resultText, sourceLanguage: item.sourceLanguage ?? "", targetLanguage: item.targetLanguage,
+      segments: item.segments ?? [], modelInfo: { provider: item.provider, model: item.model, durationMs: 0 },
+      createdAt: Date.parse(item.createdAt)
+    }, item.id);
   });
 
   function undoCleanupAndRetranslate(): void {
@@ -186,6 +222,7 @@ export function useTranslationWorkspace() {
   }
 
   async function translate(): Promise<void> {
+    if (!sourceText.value.trim()) return;
     hoveredSegmentId.value = undefined;
     lockedSegmentId.value = undefined;
     clearRevisions();
@@ -194,13 +231,25 @@ export function useTranslationWorkspace() {
     closeDictionary();
     resultView.value = "translation";
     lastTranslatedSource.value = sourceText.value;
+    lastTargetLanguage.value = targetLanguage.value;
     await start({ text: sourceText.value, mode: mode.value, targetLanguage: mode.value === "naming" ? "en" : targetLanguage.value, profileId: profileId.value, namingOptions: mode.value === "naming" ? namingOptions.value : undefined, surface: "main" });
   }
 
   async function triggerAiTranslate(): Promise<void> {
     resultView.value = "translation";
-    if (lastTranslatedSource.value === sourceText.value && (status.value === "success" || status.value === "streaming" || status.value === "loading")) return;
+    if (!translationDirty.value && lastTranslatedSource.value === sourceText.value && (status.value === "success" || status.value === "streaming" || status.value === "loading")) return;
     await translate();
+  }
+
+  async function retry(): Promise<void> { await translate(); }
+
+  function clearInput(): void {
+    clearSegmentLock();
+    closeDictionary();
+    clearRevisions();
+    reset();
+    lastTranslatedSource.value = "";
+    sourceText.value = "";
   }
 
   async function switchResultView(view: ResultView): Promise<void> {
@@ -209,20 +258,6 @@ export function useTranslationWorkspace() {
       return;
     }
     await triggerAiTranslate();
-  }
-
-  async function addActiveSegmentToGlossary(): Promise<void> {
-    const segment = lockedSegment.value;
-    if (!segment) return;
-    try {
-      const now = Date.now();
-      await translator.glossary.upsert({ id: crypto.randomUUID(), sourceTerm: segment.source, targetTerm: segment.target, sourceLanguage: "auto", targetLanguage: result.value?.targetLanguage ?? targetLanguage.value, domain: "翻译结果", caseSensitive: false, matchMode: "phrase", enabled: true, createdAt: now, updatedAt: now });
-      revisionError.value = "";
-      revisionNotice.value = "已将当前句段加入本地术语表。";
-    } catch (error) {
-      revisionNotice.value = "";
-      revisionError.value = error instanceof Error ? error.message : "加入术语表失败。";
-    }
   }
 
   async function addDictionaryTermToGlossary(): Promise<void> {
@@ -244,6 +279,7 @@ export function useTranslationWorkspace() {
   function closeOcr(): void { resetOcr(); }
   function handleSegmentHover(id: string | undefined): void { if (!lockedSegmentId.value) hoveredSegmentId.value = id; }
   function toggleSegment(id: string): void {
+    if (translationDirty.value || isRunning.value) return;
     closeDictionary();
     lockedSegmentId.value = lockedSegmentId.value === id ? undefined : id;
     hoveredSegmentId.value = undefined;
@@ -256,8 +292,8 @@ export function useTranslationWorkspace() {
   }
 
   function closeDictionary(): void {
-    translator.dictionary.context.cancel(dictionaryContextRequestId.value);
-    window.getSelection()?.removeAllRanges();
+    dictionaryLookupSequence += 1;
+    if (dictionaryContextRequestId.value) translator.dictionary.context.cancel(dictionaryContextRequestId.value);
     dictionaryTerm.value = "";
     segmentDictionary.value = null;
     dictionaryError.value = "";
@@ -266,10 +302,14 @@ export function useTranslationWorkspace() {
     dictionaryContextError.value = "";
     dictionaryContextLoading.value = false;
     dictionaryContextRequestId.value = undefined;
+    earlyDictionaryContextEvents = undefined;
+    dictionaryLoading.value = false;
   }
 
   async function lookupDictionary(term: string, segmentId?: string): Promise<void> {
-    translator.dictionary.context.cancel(dictionaryContextRequestId.value);
+    if (!shouldLookupDictionary(term)) return;
+    closeDictionary();
+    const sequence = dictionaryLookupSequence;
     lockedSegmentId.value = undefined;
     hoveredSegmentId.value = undefined;
     dictionaryTerm.value = term;
@@ -283,14 +323,16 @@ export function useTranslationWorkspace() {
     dictionaryLoading.value = true;
     try {
       const lookup = await translator.dictionary.lookup({ query: term });
+      if (sequence !== dictionaryLookupSequence) return;
       segmentDictionary.value = lookup;
       const firstSense = lookup.entry?.senses[0]?.translations[0] ?? "";
       glossaryFromDictionary.value = { sourceTerm: term, targetTerm: firstSense.split(/[；;，,]/)[0]?.trim() ?? "" };
       glossaryFromDictionaryNotice.value = "";
     } catch (error) {
+      if (sequence !== dictionaryLookupSequence) return;
       dictionaryError.value = error instanceof Error ? error.message : "本地词典暂时不可用。";
     } finally {
-      dictionaryLoading.value = false;
+      if (sequence === dictionaryLookupSequence) dictionaryLoading.value = false;
     }
   }
 
@@ -298,19 +340,31 @@ export function useTranslationWorkspace() {
     const context = dictionaryContext.value;
     if (!dictionaryTerm.value || !segmentDictionary.value?.found || !context || dictionaryContextLoading.value) return;
 
-    translator.dictionary.context.cancel(dictionaryContextRequestId.value);
+    if (dictionaryContextRequestId.value) translator.dictionary.context.cancel(dictionaryContextRequestId.value);
+    const sequence = dictionaryLookupSequence;
     dictionaryContextText.value = "";
     dictionaryContextError.value = "";
     dictionaryContextLoading.value = true;
+    earlyDictionaryContextEvents = [];
     try {
-      dictionaryContextRequestId.value = await translator.dictionary.context.start({
+      const id = await translator.dictionary.context.start({
         term: dictionaryTerm.value,
         source: context.source,
         target: context.target,
-        targetLanguage: targetLanguage.value,
+        targetLanguage: result.value?.targetLanguage === "en" ? "en" : "zh-CN",
         profileId: profileId.value
       });
+      if (sequence !== dictionaryLookupSequence) {
+        translator.dictionary.context.cancel(id);
+        return;
+      }
+      dictionaryContextRequestId.value = id;
+      const events = earlyDictionaryContextEvents ?? [];
+      earlyDictionaryContextEvents = undefined;
+      events.forEach(handleDictionaryContextEvent);
     } catch (error) {
+      if (sequence !== dictionaryLookupSequence) return;
+      earlyDictionaryContextEvents = undefined;
       dictionaryContextError.value = error instanceof Error ? error.message : "上下文解释暂时不可用。";
       dictionaryContextLoading.value = false;
       dictionaryContextRequestId.value = undefined;
@@ -318,8 +372,9 @@ export function useTranslationWorkspace() {
   }
 
   async function copyResult(): Promise<void> { if (resultText.value) { await translator.clipboard.writeText(displayResultText.value); markCopied(); } }
-  async function copySource(): Promise<void> { if (sourceText.value) { await translator.clipboard.writeText(sourceText.value); markCopied(); } }
-  async function copyBilingual(): Promise<void> { if (sourceText.value && displayResultText.value) { await translator.clipboard.writeText(`原文：${sourceText.value}\n\n译文：${displayResultText.value}`); markCopied(); } }
+  async function copyDictionaryTerm(): Promise<void> { if (dictionaryTerm.value) { await translator.clipboard.writeText(dictionaryTerm.value); markCopied(); } }
+  async function copySource(): Promise<void> { const text = result.value?.sourceText ?? sourceText.value; if (text) { await translator.clipboard.writeText(text); markCopied(); } }
+  async function copyBilingual(): Promise<void> { const text = result.value?.sourceText ?? sourceText.value; if (text && displayResultText.value) { await translator.clipboard.writeText(`原文：${text}\n\n译文：${displayResultText.value}`); markCopied(); } }
   async function copyNamingCandidate(name: string): Promise<void> {
     if (!name.trim()) return;
     await translator.clipboard.writeText(name);
@@ -341,12 +396,18 @@ export function useTranslationWorkspace() {
       resultText.value = quickSession.resultText;
       if (quickSession.resultText || quickSession.segments.length) result.value = { requestId: quickSession.requestId ?? quickSession.id, sourceText: quickSession.sourceText, originalSourceText: quickSession.sourceText, targetText: quickSession.resultText, sourceLanguage: "", targetLanguage: quickSession.targetLanguage, segments: quickSession.segments, modelInfo: { provider: "ollama", model: "", durationMs: 0 }, createdAt: quickSession.createdAt };
       status.value = quickSession.status;
+      historyId.value = quickSession.historyId;
+      if (quickSession.historyId) {
+        const item = await translator.history.get(quickSession.historyId);
+        revisions.value = item?.revisions ?? [];
+      }
       lastTranslatedSource.value = quickSession.sourceText;
+      lastTargetLanguage.value = quickSession.targetLanguage;
     }
   });
 
-  const removeDictionaryContextListener = translator.dictionary.context.onEvent((event) => {
-    if (dictionaryContextRequestId.value && event.requestId !== dictionaryContextRequestId.value) return;
+  function handleDictionaryContextEvent(event: DictionaryContextEvent): void {
+    if (!dictionaryContextRequestId.value || event.requestId !== dictionaryContextRequestId.value) return;
     dictionaryContextLoading.value = event.status === "loading";
     if (event.status === "success") {
       dictionaryContextText.value = event.explanation ?? "";
@@ -358,21 +419,26 @@ export function useTranslationWorkspace() {
       dictionaryContextLoading.value = false;
       dictionaryContextRequestId.value = undefined;
     }
+  }
+  const removeDictionaryContextListener = translator.dictionary.context.onEvent((event) => {
+    if (earlyDictionaryContextEvents) earlyDictionaryContextEvents.push(event);
+    else handleDictionaryContextEvent(event);
   });
   onUnmounted(() => {
-    translator.dictionary.context.cancel(dictionaryContextRequestId.value);
+    closeDictionary();
     removeDictionaryContextListener();
   });
 
   return {
     PROFILE_SHORTCUTS, sourceText, mode, namingOptions, targetLanguage, profiles, profileId, providerLabel, selectProfileShortcut, onProfileChange,
     maxInputLength, showOriginalText, cleanupNotice, undoCleanupAndRetranslate, isRunning, triggerAiTranslate,
+    sourceDirty, translationDirty, clearInput, pendingRevision, applyRevision, discardSuggestion, lastInstruction, persistRevisions, copyDictionaryTerm,
     resultView, showDictionaryTab, showMainDictionary, switchResultView, autoDictionaryResult, dictionaryStatus, dictionaryEligible, dictionarySuggestions,
     status, displayResultText, result, errorMessage, warningMessage, displaySegments, activeSegmentId, copied, copyResult, copySource, copyBilingual, copyNamingCandidate, stop, retry,
     handleSegmentHover, toggleSegment, clearSegmentLock, navigateSegment, lookupDictionary,
     ocrResult, ocrError, ocrLoading, captureOcr, closeOcr, ocrImage, ocrSelectionStyle, selectingOcr, beginOcrSelection, moveOcrSelection, endOcrSelection, cancelOcrSelection, setOcrImage,
     dictionaryTerm, dictionaryCard, dictionaryLoading, dictionaryError, segmentDictionary, closeDictionary, dictionaryContext, dictionaryContextLoading, dictionaryContextText, dictionaryContextError, requestDictionaryContext, glossaryFromDictionary, glossaryFromDictionaryNotice, addDictionaryTermToGlossary,
-    showRevisionPopover, alternativesLoading, requestAlternatives, addActiveSegmentToGlossary, revisions, lockedSegment, undoRevision, customRevisionInstruction, revisionStatus, reviseSegment, reviseWithCustomInstruction, alternatives, applyAlternative, revisionError, revisionNotice,
+    showRevisionPopover, alternativesLoading, requestAlternatives, revisions, lockedSegment, undoRevision, customRevisionInstruction, revisionStatus, reviseSegment, reviseWithCustomInstruction, alternatives, applyAlternative, revisionError, revisionNotice,
     glossaryValidation, sourceTextarea, cleanupDismissed
   };
 }

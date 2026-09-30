@@ -15,6 +15,7 @@ defineProps<{
   activeSegmentId?: string;
   copied?: boolean;
   targetLanguage?: string;
+  adjustable?: boolean;
 }>();
 const emit = defineEmits<{
   copy: [];
@@ -54,13 +55,14 @@ const emit = defineEmits<{
         side="target"
         :segments="segments"
         :active-id="activeSegmentId"
+        :adjustable="adjustable ?? false"
         @hover="emit('hover', $event)"
         @toggle="emit('toggle', $event)"
         @clear="emit('clear')"
         @navigate="emit('navigate', $event)"
         @select-term="(term, segmentId) => emit('selectTerm', term, segmentId)"
       />
-      <pre v-else class="result-text">{{ text }}<span v-if="status === 'streaming'" class="stream-cursor" /></pre>
+      <pre v-else class="result-text" data-selection-text>{{ text }}<span v-if="status === 'streaming'" class="stream-cursor" /></pre>
     </template>
   </section>
 </template>
