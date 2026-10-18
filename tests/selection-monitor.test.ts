@@ -23,53 +23,33 @@ class FakeMouseHook implements GlobalMouseHook {
 }
 
 describe("SelectionMonitor", () => {
-  it("does not access the clipboard while an application window is focused", async () => {
+  it("does not report a selection while an application window is focused", () => {
     const hook = new FakeMouseHook();
-    const capture = vi.fn(async () => ({ text: "selected text" }));
     const onSelection = vi.fn();
-    const monitor = new SelectionMonitor(hook, capture, onSelection, undefined, undefined, () => false);
+    const monitor = new SelectionMonitor(hook, onSelection, undefined, undefined, () => false);
     monitor.start();
     hook.emit("mousedown", { button: 1, x: 100, y: 100 });
     hook.emit("mouseup", { button: 1, x: 180, y: 100 });
-    await Promise.resolve();
-    expect(capture).not.toHaveBeenCalled();
     expect(onSelection).not.toHaveBeenCalled();
     monitor.stop();
   });
 
-  it("discards an external capture when focus returns to the application", async () => {
-    const hook = new FakeMouseHook();
-    let eligible = true;
-    let resolveCapture!: (value: { text: string }) => void;
-    const onSelection = vi.fn();
-    const monitor = new SelectionMonitor(hook, () => new Promise((resolve) => { resolveCapture = resolve; }), onSelection, undefined, undefined, () => eligible);
-    monitor.start();
-    hook.emit("mousedown", { button: 1, x: 100, y: 100 });
-    hook.emit("mouseup", { button: 1, x: 180, y: 100 });
-    eligible = false;
-    resolveCapture({ text: "external selection" });
-    await Promise.resolve();
-    expect(onSelection).not.toHaveBeenCalled();
-    monitor.stop();
-  });
-
-  it("开启后在完成有效划词时显示悬浮提示", async () => {
+  it("开启后在完成有效拖选时报告悬浮提示位置", () => {
     const hook = new FakeMouseHook();
     const onSelection = vi.fn();
-    const monitor = new SelectionMonitor(hook, async () => ({ text: "selected text" }), onSelection);
+    const monitor = new SelectionMonitor(hook, onSelection);
 
     monitor.start();
     hook.emit("mousedown", { button: 1, x: 100, y: 100 });
     hook.emit("mouseup", { button: 1, x: 180, y: 100 });
-    await vi.waitFor(() => expect(onSelection).toHaveBeenCalledWith("selected text", { x: 180, y: 100 }));
+    expect(onSelection).toHaveBeenCalledWith({ x: 180, y: 100 });
   });
 
-  it("按系统缩放将物理鼠标坐标转换为 Electron 坐标", async () => {
+  it("按系统缩放将物理鼠标坐标转换为 Electron 坐标", () => {
     const hook = new FakeMouseHook();
     const onSelection = vi.fn();
     const monitor = new SelectionMonitor(
       hook,
-      async () => ({ text: "selected text" }),
       onSelection,
       undefined,
       (point) => ({ x: point.x / 2, y: point.y / 2 })
@@ -79,13 +59,13 @@ describe("SelectionMonitor", () => {
     hook.emit("mousedown", { button: 1, x: 100, y: 100 });
     hook.emit("mouseup", { button: 1, x: 180, y: 120 });
 
-    await vi.waitFor(() => expect(onSelection).toHaveBeenCalledWith("selected text", { x: 90, y: 60 }));
+    expect(onSelection).toHaveBeenCalledWith({ x: 90, y: 60 });
   });
 
-  it("点击或停用监听时不显示悬浮提示", async () => {
+  it("点击或停用监听时不显示悬浮提示", () => {
     const hook = new FakeMouseHook();
     const onSelection = vi.fn();
-    const monitor = new SelectionMonitor(hook, async () => ({ text: "selected text" }), onSelection);
+    const monitor = new SelectionMonitor(hook, onSelection);
 
     monitor.start();
     hook.emit("mousedown", { button: 1, x: 100, y: 100 });
@@ -93,7 +73,6 @@ describe("SelectionMonitor", () => {
     monitor.stop();
     hook.emit("mousedown", { button: 1, x: 100, y: 100 });
     hook.emit("mouseup", { button: 1, x: 180, y: 100 });
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(onSelection).not.toHaveBeenCalled();
   });

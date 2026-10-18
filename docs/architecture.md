@@ -70,10 +70,11 @@ OCR 先捕获接近物理像素的屏幕图像并返回短期 `captureId`，Rend
 ## 划词路径
 
 1. `uiohook-napi` 适配器只向内部接口暴露全局 `mousedown` / `mouseup`。
-2. `SelectionMonitor` 判定有效拖选，并将物理屏幕坐标转换为 Electron DIP。
-3. 选区仍拥有焦点时，主进程临时保存剪贴板、模拟 `Ctrl+C`、读取文本并恢复剪贴板。
-4. `SelectionController` 缓存待确认文本，在选区下方显示 Logo。
-5. 用户点击 Logo 后，控制器消费缓存文本并打开快速翻译窗；取消、超时或关闭开关会清空缓存。
+2. `SelectionMonitor` 只判断有效拖选和坐标，不读取选区，也不访问剪贴板。
+3. `SelectionController` 保存待确认位置并显示 Selection Logo；新拖选、右键、超时、关闭开关或退出会使待确认状态失效。
+4. 用户点击 Logo，或按下快速翻译 / 编程命名快捷键后，主进程才通过 `SelectionTextReader` 读取选区。Logo、快捷键和 `selection:capture` 共用这一服务，并且串行执行。
+5. Windows 优先用 UI Automation 读取当前焦点控件的选中文字；不支持、为空或失败时才进入剪贴板回退。
+6. 剪贴板回退不写入标记。它先保存原剪贴板和序列号，再模拟一次复制；只有剪贴板仍是本次捕获产生的版本时才恢复快照，若期间出现更新则保留较新内容。
 
 ## IPC 与安全
 

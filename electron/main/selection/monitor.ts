@@ -11,36 +11,28 @@ export interface GlobalMouseHook {
   stop(): void;
 }
 
-interface CapturedSelection {
-  text: string;
-  error?: string;
-}
-
 export interface SelectionPoint {
   x: number;
   y: number;
 }
 
 /**
- * 监听全局鼠标拖选，在原应用仍持有焦点时读取选区。
+ * 监听全局鼠标拖选，只报告可能的文本选区，不读取剪贴板。
  */
 export class SelectionMonitor {
   private running = false;
   private dragStart?: SelectionPoint;
-  private captureSequence = 0;
 
   constructor(
     private readonly hook: GlobalMouseHook,
-    private readonly capture: () => Promise<CapturedSelection>,
-    private readonly onSelection: (text: string, point: SelectionPoint) => void,
+    private readonly onSelection: (point: SelectionPoint) => void,
     private readonly onPointerDown: (point: SelectionPoint) => void = () => undefined,
     private readonly normalizePoint: (point: SelectionPoint) => SelectionPoint = (point) => point,
-    private readonly shouldCapture: () => boolean = () => true
+    private readonly shouldShowTip: () => boolean = () => true
   ) {}
 
   private readonly handleMouseDown = (event: GlobalMouseEvent): void => {
     if (event.button !== 1) return;
-    this.captureSequence += 1;
     this.dragStart = { x: event.x, y: event.y };
     this.onPointerDown(this.normalizePoint(this.dragStart));
   };
@@ -49,14 +41,10 @@ export class SelectionMonitor {
     if (event.button !== 1 || !this.dragStart) return;
     const distance = Math.hypot(event.x - this.dragStart.x, event.y - this.dragStart.y);
     this.dragStart = undefined;
-    if (distance < 6 || !this.shouldCapture()) return;
+    if (distance < 6 || !this.shouldShowTip()) return;
 
-    const sequence = ++this.captureSequence;
     const point = this.normalizePoint({ x: event.x, y: event.y });
-    void this.capture().then((result) => {
-      if (!this.running || sequence !== this.captureSequence || !this.shouldCapture() || !result.text.trim()) return;
-      this.onSelection(result.text, point);
-    });
+    if (this.running) this.onSelection(point);
   };
 
   start(): void {
@@ -77,7 +65,6 @@ export class SelectionMonitor {
   stop(): void {
     if (!this.running) return;
     this.running = false;
-    this.captureSequence += 1;
     this.dragStart = undefined;
     this.hook.off("mousedown", this.handleMouseDown);
     this.hook.off("mouseup", this.handleMouseUp);

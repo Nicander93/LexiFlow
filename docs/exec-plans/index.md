@@ -20,3 +20,4 @@
 ## 当前活动
 
 - [代码与架构重构](active/architecture-refactor.md)：等待 Windows 目标环境人工验收。
+- [划词翻译按需捕获与剪贴板安全](active/selection-capture-safety.md)：拖选只显示 Logo，点击后使用 UI Automation 优先、剪贴板安全回退的选区读取流程。

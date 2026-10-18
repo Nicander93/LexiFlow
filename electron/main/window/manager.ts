@@ -11,7 +11,6 @@ export class WindowManager {
   private mainWindow: BrowserWindow | null = null;
   private popupWindow: BrowserWindow | null = null;
   private selectionTipWindow: BrowserWindow | null = null;
-  private selectionTipTimer?: ReturnType<typeof setTimeout>;
   private popupPinned = false;
   private fontSize = 14;
   private isQuitting = false;
@@ -241,6 +240,7 @@ export class WindowManager {
       transparent: true,
       backgroundColor: "#00000000",
       hasShadow: false,
+      focusable: false,
       resizable: false,
       alwaysOnTop: true,
       skipTaskbar: true,
@@ -263,13 +263,9 @@ export class WindowManager {
     const y = Math.min(Math.max(point.y + 6, bounds.y), bounds.y + bounds.height - height);
     window.setPosition(Math.round(x), Math.round(y), false);
     window.showInactive();
-    if (this.selectionTipTimer) clearTimeout(this.selectionTipTimer);
-    this.selectionTipTimer = setTimeout(() => this.hideSelectionTip(), 5_000);
   }
 
   hideSelectionTip(): void {
-    if (this.selectionTipTimer) clearTimeout(this.selectionTipTimer);
-    this.selectionTipTimer = undefined;
     this.selectionTipWindow?.hide();
   }
 

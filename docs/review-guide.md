@@ -33,7 +33,8 @@
 ### 划词翻译
 
 - `SelectionController` 负责启停、确认、取消和退出清理。
-- `SelectionMonitor` 只负责选择状态判断，不直接操作窗口。
+- `SelectionMonitor` 只负责选择状态判断，不直接操作窗口或剪贴板。
+- 选区文字只在用户点击 Logo 或使用明确快捷键后，经 `SelectionTextReader` 读取。
 - 原生鼠标钩子只通过 `uiohook-adapter.ts` 接入，避免原生依赖扩散。
 - 提示位置使用 DIP 坐标，并在多屏和不同缩放比例下验收。
 - 设置关闭后必须停止监听并立即收起待处理提示。

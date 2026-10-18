@@ -1,4 +1,5 @@
 import { SelectionMonitor, type GlobalMouseHook, type SelectionPoint } from "./monitor";
+import type { SelectionResult } from "../../shared/types";
 
 interface SelectionControllerOptions {
   hook: GlobalMouseHook;
@@ -7,23 +8,28 @@ interface SelectionControllerOptions {
   showTip: (point: SelectionPoint) => void;
   hideTip: () => void;
   isTipPoint: (point: SelectionPoint) => boolean;
-  onConfirm: (text: string) => void;
-  shouldCapture?: () => boolean;
+  onConfirm: (result: SelectionResult) => void;
+  shouldShowTip?: () => boolean;
+  tipDurationMs?: number;
 }
 
 /**
- * 统一管理划词监听、待确认文本和悬浮提示生命周期。
+ * 统一管理划词监听、待确认选区和悬浮提示生命周期。
  */
 export class SelectionController {
-  private pendingText = "";
+  private pending = false;
+  private captureSequence = 0;
+  private captureTask?: Promise<SelectionResult>;
+  private tipTimer?: ReturnType<typeof setTimeout>;
   private readonly monitor: SelectionMonitor;
 
   constructor(private readonly options: SelectionControllerOptions) {
     this.monitor = new SelectionMonitor(
       options.hook,
-      options.capture,
-      (text, point) => {
-        this.pendingText = text;
+      (point) => {
+        this.pending = true;
+        this.clearTipTimer();
+        this.tipTimer = setTimeout(() => this.dismiss(), options.tipDurationMs ?? 5_000);
         options.showTip(point);
       },
       (point) => {
@@ -31,7 +37,7 @@ export class SelectionController {
         this.dismiss();
       },
       options.normalizePoint,
-      options.shouldCapture
+      options.shouldShowTip
     );
   }
 
@@ -45,14 +51,38 @@ export class SelectionController {
   }
 
   confirm(): void {
-    const text = this.pendingText;
-    this.dismiss();
-    if (text) this.options.onConfirm(text);
+    if (!this.pending || this.captureTask) return;
+    this.pending = false;
+    this.clearTipTimer();
+    this.options.hideTip();
+
+    const sequence = ++this.captureSequence;
+    const task = this.options.capture();
+    this.captureTask = task;
+    void task.then(
+      (result) => {
+        if (sequence === this.captureSequence) this.options.onConfirm(result);
+      },
+      () => {
+        if (sequence === this.captureSequence) {
+          this.options.onConfirm({ text: "", error: "读取选中文字失败，请改用手动输入。" });
+        }
+      }
+    ).finally(() => {
+      if (this.captureTask === task) this.captureTask = undefined;
+    });
   }
 
   dismiss(): void {
-    this.pendingText = "";
+    this.pending = false;
+    this.captureSequence += 1;
+    this.clearTipTimer();
     this.options.hideTip();
+  }
+
+  private clearTipTimer(): void {
+    if (this.tipTimer) clearTimeout(this.tipTimer);
+    this.tipTimer = undefined;
   }
 
   dispose(): void {

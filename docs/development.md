@@ -27,7 +27,7 @@ electron/
     interfaces/ipc/  IPC 注册组合边界
     ocr/             Windows OCR
     provider/        Ollama / OpenAI-compatible
-    selection/       全局划词监听、控制器与原生适配器
+    selection/       全局划词监听、选区读取与原生适配器
     core/            访问校验、快捷键事务和模型调度
     storage/         本地 JSON 与 safeStorage
     translation/     交互翻译编排与 Session

@@ -4,7 +4,7 @@ import { detectLanguage, resolveTargetLanguage } from "../electron/main/core/lan
 import { buildModelOptions } from "../electron/main/core/model-options";
 import { buildDictionaryContextPrompt, buildPrompt, buildRevisionPrompt } from "../electron/main/core/prompt";
 import { validateSettings } from "../electron/main/core/settings-validation";
-import { isCapturedSelection, validateInput } from "../electron/main/core/validation";
+import { validateInput } from "../electron/main/core/validation";
 import { mapProviderError, UserFacingError } from "../electron/main/core/errors";
 import { reactive } from "vue";
 import { toIpcPayload } from "../electron/shared/serialization";
@@ -26,11 +26,6 @@ describe("文本与剪贴板校验", () => {
     expect(validateInput("line 1\r\n\tline 2", 100)).toEqual({ ok: true, text: "line 1\n\tline 2" });
   });
 
-  it("通过临时标记判断复制是否成功，也允许选中文字与旧剪贴板相同", () => {
-    expect(isCapturedSelection("same", "marker")).toBe(true);
-    expect(isCapturedSelection("marker", "marker")).toBe(false);
-    expect(isCapturedSelection("   ", "marker")).toBe(false);
-  });
 });
 
 describe("提示词和模型参数", () => {

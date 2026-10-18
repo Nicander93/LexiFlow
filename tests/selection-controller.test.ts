@@ -23,14 +23,15 @@ class FakeMouseHook implements GlobalMouseHook {
 }
 
 describe("SelectionController", () => {
-  it("集中管理监听、提示和确认翻译", async () => {
+  it("拖选只显示提示，确认后才读取并提交选区", async () => {
     const hook = new FakeMouseHook();
+    const capture = vi.fn(async () => ({ text: "selected" }));
     const showTip = vi.fn();
     const hideTip = vi.fn();
     const onConfirm = vi.fn();
     const controller = new SelectionController({
       hook,
-      capture: async () => ({ text: "selected" }),
+      capture,
       normalizePoint: (point) => point,
       showTip,
       hideTip,
@@ -41,13 +42,94 @@ describe("SelectionController", () => {
     controller.setEnabled(true);
     hook.emit("mousedown", { button: 1, x: 10, y: 10 });
     hook.emit("mouseup", { button: 1, x: 80, y: 10 });
-    await vi.waitFor(() => expect(showTip).toHaveBeenCalledWith({ x: 80, y: 10 }));
+    expect(showTip).toHaveBeenCalledWith({ x: 80, y: 10 });
+    expect(capture).not.toHaveBeenCalled();
 
     controller.confirm();
-    expect(onConfirm).toHaveBeenCalledWith("selected");
+    await vi.waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ text: "selected" }));
+    expect(capture).toHaveBeenCalledTimes(1);
     expect(hideTip).toHaveBeenCalled();
 
     controller.setEnabled(false);
     expect(hook.stop).toHaveBeenCalled();
+  });
+
+  it("合并重复确认，避免并发读取选区", async () => {
+    const hook = new FakeMouseHook();
+    let resolveCapture!: (result: { text: string }) => void;
+    const capture = vi.fn(() => new Promise<{ text: string }>((resolve) => { resolveCapture = resolve; }));
+    const onConfirm = vi.fn();
+    const controller = new SelectionController({
+      hook,
+      capture,
+      normalizePoint: (point) => point,
+      showTip: vi.fn(),
+      hideTip: vi.fn(),
+      isTipPoint: () => false,
+      onConfirm
+    });
+
+    controller.setEnabled(true);
+    hook.emit("mousedown", { button: 1, x: 10, y: 10 });
+    hook.emit("mouseup", { button: 1, x: 80, y: 10 });
+    controller.confirm();
+    controller.confirm();
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    resolveCapture({ text: "selected" });
+    await vi.waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+  });
+
+  it("丢弃捕获期间被取消的旧选区结果", async () => {
+    const hook = new FakeMouseHook();
+    let resolveCapture!: (result: { text: string }) => void;
+    const onConfirm = vi.fn();
+    const controller = new SelectionController({
+      hook,
+      capture: () => new Promise((resolve) => { resolveCapture = resolve; }),
+      normalizePoint: (point) => point,
+      showTip: vi.fn(),
+      hideTip: vi.fn(),
+      isTipPoint: () => false,
+      onConfirm
+    });
+
+    controller.setEnabled(true);
+    hook.emit("mousedown", { button: 1, x: 10, y: 10 });
+    hook.emit("mouseup", { button: 1, x: 80, y: 10 });
+    controller.confirm();
+    controller.dismiss();
+    resolveCapture({ text: "stale" });
+    await Promise.resolve();
+
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("提示超时后不再读取旧选区", () => {
+    vi.useFakeTimers();
+    try {
+      const hook = new FakeMouseHook();
+      const capture = vi.fn(async () => ({ text: "stale" }));
+      const controller = new SelectionController({
+        hook,
+        capture,
+        normalizePoint: (point) => point,
+        showTip: vi.fn(),
+        hideTip: vi.fn(),
+        isTipPoint: () => false,
+        onConfirm: vi.fn(),
+        tipDurationMs: 5_000
+      });
+
+      controller.setEnabled(true);
+      hook.emit("mousedown", { button: 1, x: 10, y: 10 });
+      hook.emit("mouseup", { button: 1, x: 80, y: 10 });
+      vi.advanceTimersByTime(5_000);
+      controller.confirm();
+
+      expect(capture).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

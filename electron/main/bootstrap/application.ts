@@ -4,8 +4,7 @@
  * 托盘应用：window-all-closed 不得结束进程。
  */
 import { app, BrowserWindow, clipboard, Menu, screen } from "electron";
-import type { AppSettings, TranslationMode } from "../../shared/types";
-import { captureSelectedText } from "../clipboard/selection";
+import type { AppSettings, SelectionResult, TranslationMode } from "../../shared/types";
 import { RuntimeService } from "../application/runtime/runtime-service";
 import { HistoryService } from "../application/history/history-service";
 import { GlossaryService } from "../application/glossary/glossary-service";
@@ -30,6 +29,8 @@ import { TrayManager } from "../tray/manager";
 import { WindowManager } from "../window/manager";
 import { SelectionController } from "../selection/controller";
 import { createGlobalMouseHook } from "../selection/uiohook-adapter";
+import { SelectionTextReader } from "../selection/text-reader";
+import { WindowsAutomationTextSource, WindowsClipboardTextSource } from "../selection/windows-text-sources";
 import { DiagnosticsExporter } from "../runtime/diagnostics-exporter";
 import { ElectronGlossaryFilePort } from "../glossary/file-port";
 import { createProvider } from "../provider";
@@ -76,11 +77,15 @@ export async function bootstrapApplication(): Promise<void> {
   const translationManager = new TranslationManager(settingsStore, historyStore, glossaryStore, profileStore, translationSessionStore, { engine: translationEngine, createGateway });
   const documentManager = new DocumentManager(documentStore, profileStore, settingsStore, glossaryStore, translationEngine, createGateway);
   const ocrService = new WindowsOcrService();
+  const selectionTextReader = new SelectionTextReader({
+    automation: new WindowsAutomationTextSource(),
+    clipboard: new WindowsClipboardTextSource()
+  });
   const runtimeService = new RuntimeService({
     runtimeInfo: () => ({ apiVersion: 2, electron: process.versions.electron, platform: process.platform, shortcutStatus: hotkeyManager.getStatus() }),
     providerHealth: () => createProvider(settingsStore.get()).healthCheck(),
     providerModels: () => createProvider(settingsStore.get()).getModels(),
-    captureSelection: () => captureSelectedText(settingsStore.get().translation.maxInputLength),
+    captureSelection: () => selectionTextReader.read(settingsStore.get().translation.maxInputLength),
     exportDiagnostics: () => diagnosticsExporter.export()
   });
 
@@ -102,7 +107,7 @@ export async function bootstrapApplication(): Promise<void> {
       ? undefined
       : (profileId ?? settingsStore.get().shortcuts.defaultTranslationProfileId) || "technical";
     translationManager.cancelLane("popup-translation");
-    const selection = await captureSelectedText(settingsStore.get().translation.maxInputLength);
+    const selection = await selectionTextReader.read(settingsStore.get().translation.maxInputLength);
     if (windowManager.isPopupPinned()) {
       await openSelectionInMain(selection.text, mode, resolvedProfileId);
       return;
@@ -118,26 +123,26 @@ export async function bootstrapApplication(): Promise<void> {
     await triggerSelection(modeShortcutForProfile(profileId), profileId);
   };
 
-  const showCapturedSelection = async (text: string): Promise<void> => {
+  const showCapturedSelection = async (selection: SelectionResult): Promise<void> => {
     const profileId = settingsStore.get().shortcuts.defaultTranslationProfileId || "technical";
     const mode = modeShortcutForProfile(profileId);
     translationManager.cancelLane("popup-translation");
     if (windowManager.isPopupPinned()) {
-      await openSelectionInMain(text, mode, profileId);
+      await openSelectionInMain(selection.text, mode, profileId);
       return;
     }
-    await windowManager.showPopup({ mode, profileId, text }, { focus: true });
+    await windowManager.showPopup({ mode, profileId, text: selection.text, error: selection.error }, { focus: true });
   };
 
   const selectionController = new SelectionController({
     hook: createGlobalMouseHook(),
-    capture: () => captureSelectedText(settingsStore.get().translation.maxInputLength),
-    shouldCapture: () => !BrowserWindow.getAllWindows().some((window) => window.isFocused() || window.webContents.isDevToolsFocused()),
+    capture: () => selectionTextReader.read(settingsStore.get().translation.maxInputLength),
+    shouldShowTip: () => !BrowserWindow.getAllWindows().some((window) => window.isFocused() || window.webContents.isDevToolsFocused()),
     normalizePoint: (point) => screen.screenToDipPoint(point),
     showTip: (point) => void windowManager.showSelectionTip(point),
     hideTip: () => windowManager.hideSelectionTip(),
     isTipPoint: (point) => windowManager.isSelectionTipPoint(point),
-    onConfirm: (text) => void showCapturedSelection(text)
+    onConfirm: (selection) => void showCapturedSelection(selection)
   });
 
   const hotkeyManager = new HotkeyManager((action) => {
