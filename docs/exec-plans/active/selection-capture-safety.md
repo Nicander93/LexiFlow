@@ -100,7 +100,7 @@
 - [x] 单元测试：拖选不调用 reader；点击只调用一次；重复点击合并；旧选区结果被丢弃；停用与退出清理状态。
 - [x] 单元测试：UI Automation 成功时不访问剪贴板；不支持或空选区时才回退；超长文本和错误归一化保持现有行为。
 - [x] 单元测试：多个捕获请求严格串行；复制未改变序列号时保持原剪贴板；捕获后无外部更新时恢复；出现较新序列号时不覆盖。
-- [x] 单元测试：文本、HTML、RTF、图片、文件列表和至少一种自定义格式的快照往返；任何路径都不会留下 `__LEXIFLOW_*`。
+- [x] 单元测试：文本、HTML、RTF、图片、文件列表和至少一种自定义格式的快照往返；任何路径都不会留下 `__LEXIFLOW_*`。真实 WinForms 往返需设置 `LEXIFLOW_WINDOWS_CLIPBOARD=1`；CI 与默认 `pnpm test` 只跑内存快照与算法测试。
 - [ ] Electron E2E：Logo 显示和点击不激活 LexiFlow；捕获期间显示正确状态；成功、失败和手动输入路径可用。
 - [x] `pnpm test`
 - [ ] `pnpm build`
@@ -112,6 +112,7 @@
 
 - 2026-10-18：完成第一增量。拖选只建立待确认状态，点击后才调用现有捕获函数；重复确认合并，取消、超时、停用和退出使旧结果失效；Selection Logo 配置为 `focusable: false`，真实 Windows 点击与焦点行为仍待技术验证。目标测试 8 项、完整单元测试 202 项通过（另 1 项跳过），`pnpm typecheck`、`pnpm build` 和构建契约验证通过。
 - 2026-10-18：完成第二增量。`SelectionTextReader` 统一 Logo / 快捷键 / `selection:capture` 入口；Windows 优先 UI Automation，失败才进入无标记剪贴板回退。回退按 `GetClipboardSequenceNumber()` 确认复制，并用 WinForms `DataObject` 快照往返文本、HTML、RTF、图片、文件列表和自定义格式；仅当序列号仍属于本次捕获时恢复。复制超时和恢复失败返回明确错误，不再误报为空选区。删除 `__LEXIFLOW_*` 标记路径。探查结果：WinForms 快照往返上述格式成功。Logo 不可激活点击与 Notepad/Edge/VS Code 的 UI Automation 覆盖率仍待真实应用验证。目标相关测试通过；完整单元测试 215 项通过（另 1 项跳过），`pnpm typecheck` 通过。
+- 2026-10-18：GitHub-hosted Windows runner 没有可用剪贴板会话，真实往返测试会阻塞到 15 秒超时。该测试改为 `LEXIFLOW_WINDOWS_CLIPBOARD=1` 时才运行，格式恢复仍由 `clipboard-capture` 内存快照覆盖。
 
 ### Windows 人工回归
 

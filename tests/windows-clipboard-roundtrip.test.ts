@@ -8,7 +8,7 @@ import { expect, it } from "vitest";
 import { CLIPBOARD_HELPER_SCRIPT } from "../electron/main/selection/windows-text-sources";
 
 const execFileAsync = promisify(execFile);
-const windowsTest = process.platform === "win32" ? it : it.skip;
+const windowsTest = process.env.LEXIFLOW_WINDOWS_CLIPBOARD === "1" ? it : it.skip;
 
 const ROUNDTRIP_SCRIPT = String.raw`
 $tempFile = [System.IO.Path]::GetTempFileName()
