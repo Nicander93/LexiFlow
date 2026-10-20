@@ -448,7 +448,7 @@ test("dictionary words can be saved and managed in the vocabulary book", async (
   await saveUiScreenshot(mainWindow, "vocabulary.png", true);
 });
 
-test("selection tip icon fills its transparent 36px hit target without clipping", async () => {
+test("selection tip button contains a centered icon within its 36px hit target", async () => {
   await mainWindow.evaluate(() => { location.hash = "#/selection-tip"; });
   const tip = mainWindow.getByRole("button", { name: "翻译选中文字" });
   await expect(tip).toBeVisible();
@@ -467,7 +467,8 @@ test("selection tip icon fills its transparent 36px hit target without clipping"
     };
   });
   expect(metrics.bodyClass).toBe(true);
-  for (const key of ["buttonWidth", "buttonHeight", "imageWidth", "imageHeight"] as const) expect(metrics[key]).toBeCloseTo(32, 1);
+  for (const key of ["buttonWidth", "buttonHeight"] as const) expect(metrics[key]).toBeCloseTo(32, 1);
+  for (const key of ["imageWidth", "imageHeight"] as const) expect(metrics[key]).toBeCloseTo(18, 1);
   expect(metrics.outerWidth).toBeCloseTo(36, 1);
   expect(metrics.outerHeight).toBeCloseTo(36, 1);
   await tip.hover();
