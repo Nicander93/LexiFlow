@@ -54,8 +54,17 @@ export function useVocabularyBook(autoLoad = true) {
   }
 
   async function remove(id: string): Promise<void> {
-    await translator.vocabulary.delete(id);
-    entries.value = entries.value.filter((entry) => entry.id !== id);
+    error.value = "";
+    notice.value = "";
+    const entry = entries.value.find((item) => item.id === id);
+    if (!entry) return;
+    try {
+      await translator.vocabulary.delete(id);
+      entries.value = entries.value.filter((item) => item.id !== id);
+      notice.value = `已删除“${entry.term}”。`;
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : "无法删除单词，请重试。";
+    }
   }
 
   async function clear(): Promise<void> {

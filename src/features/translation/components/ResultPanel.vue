@@ -16,6 +16,7 @@ defineProps<{
   copied?: boolean;
   targetLanguage?: string;
   adjustable?: boolean;
+  stopInComposer?: boolean;
 }>();
 const emit = defineEmits<{
   copy: [];
@@ -37,7 +38,7 @@ const emit = defineEmits<{
       <slot name="toolbar-start"><span>译文</span></slot>
       <div class="toolbar-actions">
         <SpeechButton v-if="text" :text="text" :language="targetLanguage" icon-only label="朗读译文" />
-        <button v-if="status === 'loading' || status === 'streaming'" class="icon-button" title="停止" @click="emit('stop')"><AppIcon name="stop" :size="17" /></button>
+        <button v-if="!stopInComposer && (status === 'loading' || status === 'streaming')" class="icon-button" title="停止" @click="emit('stop')"><AppIcon name="stop" :size="17" /></button>
         <button v-if="status === 'error' || status === 'cancelled'" class="icon-button" title="重试" @click="emit('retry')"><AppIcon name="refresh" :size="17" /></button>
         <div class="copy-actions">
           <button class="icon-button" title="复制双语" aria-label="复制双语" :disabled="!sourceText || !text" @click="emit('copyBilingual')"><AppIcon :name="copied ? 'check' : 'bilingual'" :size="17" /></button>
@@ -45,11 +46,12 @@ const emit = defineEmits<{
         </div>
       </div>
     </div>
-    <div v-if="status === 'error'" class="state-message error-message">{{ error }}</div>
-    <div v-else-if="status === 'loading'" class="state-message state-message--stack"><span class="soft-loader"><i /><i /><i /></span><strong>正在唤醒模型</strong><small>第一段内容很快会出现在这里</small></div>
-    <div v-else-if="!text" class="state-message state-message--stack muted"><span class="empty-orb"><AppIcon name="sparkle" :size="25" /></span><strong>{{ placeholder || '译文会在这里流动起来' }}</strong><small>保留段落、代码与换行，不额外发挥</small></div>
+    <div v-if="status === 'error'" class="state-message error-message" role="alert">{{ error }}</div>
+    <div v-else-if="status === 'loading'" class="state-message state-message--stack" role="status"><span class="soft-loader"><i /><i /><i /></span><strong>正在准备翻译</strong></div>
+    <div v-else-if="status === 'cancelled' && !text" class="state-message muted" role="status">已停止翻译</div>
+    <div v-else-if="!text" class="state-message state-message--stack muted"><strong>{{ placeholder || '译文会显示在这里' }}</strong></div>
     <template v-else>
-      <div v-if="warning" class="state-message warning-message">{{ warning }}</div>
+      <div v-if="warning" class="state-message warning-message" role="status">{{ warning }}</div>
       <SegmentedText
         v-if="segments?.length"
         side="target"

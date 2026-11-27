@@ -85,7 +85,7 @@ onBeforeUnmount(() => {
 .ocr-overlay--capture { padding: 14px 18px 18px; background: rgba(28,31,28,.82); backdrop-filter: blur(6px); }
 .ocr-progress, .ocr-error-card {
   display: flex; align-items: center; gap: 13px; width: min(360px, 100%); min-height: 82px; padding: 16px 18px;
-  border: 1px solid rgba(255,255,255,.76); border-radius: 12px; background: rgba(255,255,255,.96); box-shadow: var(--shadow-float);
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface-solid); box-shadow: var(--shadow-float);
 }
 .ocr-progress div, .ocr-error-card div { display: grid; gap: 3px; min-width: 0; }
 .ocr-progress strong, .ocr-error-card strong { font-size: 13px; }
@@ -120,8 +120,8 @@ onBeforeUnmount(() => {
 }
 .ocr-float-state {
   position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 9px;
-  max-width: calc(100% - 32px); padding: 9px 12px; border: 1px solid rgba(255,255,255,.7); border-radius: 9px;
-  color: var(--ink-soft); background: rgba(255,255,255,.96); box-shadow: var(--shadow-float); font-size: 12px;
+  max-width: calc(100% - 32px); padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px;
+  color: var(--ink-soft); background: var(--surface-solid); box-shadow: var(--shadow-float); font-size: 12px;
 }
 .ocr-float-state.error { color: var(--danger); }
 .ocr-float-state button { border: 0; border-radius: 6px; padding: 5px 8px; color: var(--accent-strong); background: var(--accent-soft); font-weight: 600; }

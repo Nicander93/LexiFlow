@@ -4,6 +4,7 @@ import { DEFAULT_PROMPTS } from "../../../../electron/shared/defaults";
 import type { AppSettings } from "../../../../electron/shared/types";
 import { getTranslatorApi } from "../../../platform/translator";
 import SettingGroup from "../components/SettingGroup.vue";
+import InlineConfirm from "../../../components/InlineConfirm.vue";
 
 const props = defineProps<{ settings: AppSettings }>();
 const emit = defineEmits<{
@@ -14,6 +15,7 @@ const emit = defineEmits<{
 const translator = getTranslatorApi();
 const promptsOpen = ref(false);
 const confirmClear = ref(false);
+const clearing = ref(false);
 
 function restorePrompts(): void {
   props.settings.translation.normalPrompt = DEFAULT_PROMPTS.normal;
@@ -31,14 +33,19 @@ async function exportDiagnostics(): Promise<void> {
 }
 
 async function clearData(): Promise<void> {
+  if (clearing.value) return;
+  clearing.value = true;
   try {
     await translator.privacy.clearLocalData();
+    window.dispatchEvent(new CustomEvent("lexiflow:local-data-cleared"));
     const settings = await translator.settings.get();
     confirmClear.value = false;
     emit("cleared", settings);
     emit("notify", "本地数据已清除，应用设置已恢复默认值。");
   } catch (error) {
     emit("notify", error instanceof Error ? error.message : "清除本地数据失败。", "error");
+  } finally {
+    clearing.value = false;
   }
 }
 </script>
@@ -48,7 +55,7 @@ async function clearData(): Promise<void> {
     <button class="settings-disclosure" type="button" :aria-expanded="promptsOpen" @click="promptsOpen = !promptsOpen">
       <span>自定义提示词</span><span>{{ promptsOpen ? "收起" : "展开" }}</span>
     </button>
-    <div v-if="promptsOpen" class="prompt-list compact-prompts">
+    <Transition name="panel"><div v-if="promptsOpen" class="prompt-list compact-prompts">
       <label>普通翻译<textarea v-model="settings.translation.normalPrompt" /></label>
       <label>技术翻译<textarea v-model="settings.translation.technicalPrompt" /></label>
       <label>编程命名<textarea v-model="settings.translation.namingPrompt" /></label>
@@ -56,7 +63,7 @@ async function clearData(): Promise<void> {
         <button class="text-button" @click="restorePrompts">恢复默认</button>
         <button class="primary-button" @click="emit('save')">保存提示词</button>
       </div>
-    </div>
+    </div></Transition>
   </SettingGroup>
 
   <SettingGroup title="诊断">
@@ -66,11 +73,8 @@ async function clearData(): Promise<void> {
   </SettingGroup>
 
   <section class="danger-zone">
-    <div><strong>清除所有本地数据</strong><small>删除历史、术语表、翻译配置和文档任务，并恢复默认设置。</small></div>
+    <div><strong>清除所有本地数据</strong><small>删除历史、单词本、术语表、翻译配置和文档任务，并恢复默认设置。</small></div>
     <button v-if="!confirmClear" class="text-button danger" @click="confirmClear = true">清除本地数据</button>
-    <div v-else class="danger-zone__confirm">
-      <button class="text-button" @click="confirmClear = false">取消</button>
-      <button class="secondary-button danger" @click="clearData">确认清除</button>
-    </div>
+    <InlineConfirm v-else message="清除后无法恢复。" action="确认清除" :busy="clearing" @cancel="confirmClear = false" @confirm="clearData" />
   </section>
 </template>

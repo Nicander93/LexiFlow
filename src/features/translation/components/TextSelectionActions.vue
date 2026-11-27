@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from "vue";
 import { shouldLookupDictionary } from "../../../../electron/shared/dictionary-eligibility";
 
 const props = withDefaults(defineProps<{ root?: HTMLElement; maxLength?: number }>(), { maxLength: 10_000 });
@@ -13,6 +13,7 @@ const dictionaryEligible = computed(() => shouldLookupDictionary(selectedText.va
 function clear(): void { selectedText.value = ""; segmentId.value = undefined; }
 
 function captureSelection(event: MouseEvent | KeyboardEvent): void {
+  if (event instanceof KeyboardEvent && event.key === "Escape") return;
   const target = event.target;
   if (!(target instanceof HTMLElement) || !props.root?.contains(target)) return;
   const selectionElement = target.closest<HTMLElement>("[data-selection-text]");
@@ -45,28 +46,37 @@ function handlePointerDown(event: MouseEvent): void {
 function handleKeydown(event: KeyboardEvent): void { if (event.key === "Escape") clear(); }
 function translate(): void { const text = selectedText.value; clear(); emit("translate", text); }
 function lookup(): void { const text = selectedText.value; const id = segmentId.value; clear(); emit("dictionary", text, id); }
-onMounted(() => {
+function subscribe(): void {
   document.addEventListener("mouseup", captureSelection);
   document.addEventListener("keyup", captureSelection);
   document.addEventListener("mousedown", handlePointerDown);
   document.addEventListener("keydown", handleKeydown);
   document.addEventListener("scroll", clear, true);
-});
-onUnmounted(() => {
+}
+
+function unsubscribe(): void {
   document.removeEventListener("mouseup", captureSelection);
   document.removeEventListener("keyup", captureSelection);
   document.removeEventListener("mousedown", handlePointerDown);
   document.removeEventListener("keydown", handleKeydown);
   document.removeEventListener("scroll", clear, true);
-});
+  clear();
+}
+
+onMounted(subscribe);
+onActivated(subscribe);
+onDeactivated(unsubscribe);
+onUnmounted(unsubscribe);
 </script>
 
 <template>
   <Teleport to="body">
+    <Transition name="menu">
     <div v-if="selectedText" ref="toolbar" class="selection-toolbar" :style="position" role="toolbar" aria-label="选中文字操作">
       <button type="button" :disabled="selectedText.length > maxLength" :title="selectedText.length > maxLength ? `选中文字超过 ${maxLength} 字符` : '只翻译选中内容'" @mousedown.prevent @click="translate">翻译选中内容</button>
       <button v-if="dictionaryEligible" type="button" @mousedown.prevent @click="lookup">查词</button>
     </div>
+    </Transition>
   </Teleport>
 </template>
 

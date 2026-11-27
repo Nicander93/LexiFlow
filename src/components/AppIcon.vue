@@ -4,7 +4,7 @@ defineProps<{
     | "translate" | "sparkle" | "history" | "settings" | "info"
     | "copy" | "stop" | "refresh" | "trash" | "search" | "document"
     | "server" | "keyboard" | "shield" | "chevron" | "check" | "bilingual"
-    | "speaker" | "book" | "star";
+    | "speaker" | "book" | "star" | "pin";
   size?: number;
 }>();
 </script>
@@ -52,6 +52,7 @@ defineProps<{
     <template v-else-if="name === 'speaker'"><path d="M5 10v4h3l4 3V7l-4 3H5Z" /><path d="M15 9.5a4 4 0 0 1 0 5M17.5 7a7 7 0 0 1 0 10" /></template>
     <template v-else-if="name === 'book'"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5v-16Z" /><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5v-16Z" /></template>
     <template v-else-if="name === 'star'"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" /></template>
+    <template v-else-if="name === 'pin'"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6Zm3 11v6" /></template>
     <template v-else-if="name === 'stop'">
       <circle cx="12" cy="12" r="9" /><rect x="9" y="9" width="6" height="6" rx="1" />
     </template>

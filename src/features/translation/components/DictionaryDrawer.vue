@@ -30,6 +30,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
+  <Transition name="panel">
   <section v-if="term" class="context-panel dictionary-card surface" aria-live="polite">
     <div class="context-panel__header">
       <strong>词典</strong>
@@ -68,6 +69,7 @@ const emit = defineEmits<{
       <button class="secondary-button" type="button" @click="emit('translate-term', term)">翻译选中内容</button>
     </div>
   </section>
+  </Transition>
 </template>
 
 <style scoped>

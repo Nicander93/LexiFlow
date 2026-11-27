@@ -4,7 +4,7 @@
 .brand-mark, .about-logo { display: block; width: 28px; height: 28px; border-radius: 8px; object-fit: cover; }
 .brand strong { overflow: hidden; font-size: 14px; letter-spacing: -.02em; white-space: nowrap; }
 .sidebar nav, .sidebar-tools, .sidebar-bottom { display: grid; gap: 2px; }
-.sidebar nav a, .sidebar-tools button, .sidebar-bottom a { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 36px; padding: 4px 7px; border: 0; border-radius: var(--radius-md); color: var(--ink-soft); background: transparent; text-align: left; text-decoration: none; font-size: 12px; font-weight: 600; transition: color .15s ease, background .15s ease; }
+.sidebar nav a, .sidebar-tools button, .sidebar-bottom a { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 36px; padding: 4px 7px; border: 0; border-radius: var(--radius-md); color: var(--ink-soft); background: transparent; text-align: left; text-decoration: none; font-size: 12px; font-weight: 600; transition: color var(--motion-control) var(--motion-ease), background var(--motion-control) var(--motion-ease); }
 .sidebar-tools button { grid-template-columns: 26px minmax(0, 1fr) auto; }
 .nav-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--radius-sm); color: var(--muted); }
 .sidebar nav a:hover, .sidebar-tools button:hover, .sidebar-bottom a:hover { color: var(--ink); background: var(--surface-hover); }
@@ -12,7 +12,7 @@
 .sidebar nav a.router-link-active .nav-icon, .sidebar-bottom a.router-link-active .nav-icon { color: var(--accent); }
 .sidebar-divider { height: 1px; margin: 8px 7px; background: var(--border); }
 .sidebar-mini-switch { position: relative; width: 26px; height: 16px; border-radius: 999px; background: var(--border-strong); }
-.sidebar-mini-switch::after { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; content: ""; transition: transform .15s ease; }
+.sidebar-mini-switch::after { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; content: ""; transition: transform var(--motion-control) var(--motion-ease); }
 .sidebar-mini-switch.active { background: var(--accent); }
 .sidebar-mini-switch.active::after { transform: translateX(10px); }
 .sidebar-bottom { margin-top: auto; }

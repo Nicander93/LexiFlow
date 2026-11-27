@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import SettingsLayout from "../features/settings/SettingsLayout.vue";
 import type { SettingsCategory } from "../features/settings/SettingsNav.vue";
 import GeneralSettings from "../features/settings/sections/GeneralSettings.vue";
@@ -16,6 +16,7 @@ const message = ref("");
 const messageType = ref<"success" | "error">("success");
 const loadError = ref("");
 let messageTimer: ReturnType<typeof setTimeout> | undefined;
+onUnmounted(() => clearTimeout(messageTimer));
 
 function notify(text: string, type: "success" | "error" = "success"): void {
   message.value = text;
@@ -65,8 +66,8 @@ onMounted(async () => {
 
 <template>
   <div class="page settings-page">
-    <div v-if="message" class="toast" :class="messageType" aria-live="polite">{{ message }}</div>
-    <div v-if="loadError" class="error-card" aria-live="polite">{{ loadError }}</div>
+    <Transition name="panel"><div v-if="message" class="toast" :class="messageType" role="status">{{ message }}</div></Transition>
+    <div v-if="loadError" class="error-card" role="alert">{{ loadError }}</div>
     <div v-else-if="form.loading.value || !form.settings.value" class="surface loading-card"><span class="spinner" />正在读取本地设置</div>
     <SettingsLayout
       v-else

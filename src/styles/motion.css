@@ -1,0 +1,28 @@
+.page-enter-active, .content-enter-active {
+  transition: opacity var(--motion-content) var(--motion-ease);
+}
+.page-enter-from, .content-enter-from { opacity: .75; }
+
+:where(button, a) {
+  transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease);
+}
+
+.feedback-icon { animation: confirm-icon var(--motion-content) var(--motion-ease); }
+@keyframes confirm-icon { from { opacity: .65; transform: scale(.86); } }
+
+.panel-enter-active, .panel-leave-active {
+  transition: opacity var(--motion-panel) var(--motion-ease), transform var(--motion-panel) var(--motion-ease);
+}
+.panel-enter-from, .panel-leave-to { opacity: 0; transform: translateY(4px); }
+.panel-leave-active, .menu-leave-active { pointer-events: none; }
+
+.menu-enter-active, .menu-leave-active {
+  transform-origin: var(--menu-origin, top);
+  transition: opacity var(--motion-control) var(--motion-ease), transform var(--motion-control) var(--motion-ease);
+}
+.menu-enter-from, .menu-leave-to { opacity: 0; transform: translateY(var(--menu-offset, -3px)) scale(.985); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-control: 0ms; --motion-content: 0ms; --motion-panel: 0ms; }
+  *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; }
+}

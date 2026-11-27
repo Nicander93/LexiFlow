@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { NamingOptions, TargetLanguage } from "../../../../electron/shared/types";
 import UiSelect from "../../../components/UiSelect.vue";
-import { computed } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { detectLanguage, resolveTargetLanguage } from "../../../../electron/shared/language";
 
 const props = defineProps<{
@@ -11,7 +11,7 @@ const props = defineProps<{
   targetLanguage: TargetLanguage;
   maxInputLength: number;
   isRunning: boolean;
-  compact: boolean;
+  canUndo: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -19,12 +19,31 @@ const emit = defineEmits<{
   "update:namingOptions": [value: NamingOptions];
   "update:targetLanguage": [value: TargetLanguage];
   submit: [];
-  paste: [];
+  stop: [];
   clear: [];
+  undo: [];
 }>();
+
+const input = ref<HTMLTextAreaElement>();
+
+function run(): void {
+  if (props.isRunning) emit("stop");
+  else if (props.sourceText.trim()) emit("submit");
+}
+
+function clearOrUndo(): void {
+  if (props.sourceText) emit("clear");
+  else emit("undo");
+  void nextTick(() => input.value?.focus());
+}
 
 function patchNaming(patch: Partial<NamingOptions>): void {
   emit("update:namingOptions", { ...props.namingOptions, ...patch });
+}
+
+function changeNamingType(type: NamingOptions["type"]): void {
+  const style = type === "class" || type === "interface" ? "PascalCase" : type === "constant" ? "SCREAMING_SNAKE_CASE" : "camelCase";
+  patchNaming({ type, style });
 }
 
 const languageOptions = [
@@ -42,11 +61,11 @@ const namingTypeOptions = [
   { value: "interface", label: "接口" },
   { value: "constant", label: "常量" }
 ];
-const namingStyleOptions = ["camelCase", "PascalCase", "snake_case", "kebab-case"].map((value) => ({ value, label: value }));
+const namingStyleOptions = ["camelCase", "PascalCase", "snake_case", "SCREAMING_SNAKE_CASE", "kebab-case"].map((value) => ({ value, label: value }));
 </script>
 
 <template>
-  <section class="workbench-composer" :class="{ compact, naming: mode === 'naming' }">
+  <section class="workbench-composer" :class="{ naming: mode === 'naming' }">
     <div v-if="mode !== 'naming'" class="language-row">
       <span>{{ sourceLanguageLabel }}</span>
       <span aria-hidden="true">→</span>
@@ -60,6 +79,7 @@ const namingStyleOptions = ["camelCase", "PascalCase", "snake_case", "kebab-case
       <small v-if="targetLanguage === 'auto' && sourceText.trim()" class="language-direction">译为{{ targetLanguageLabel }}</small>
     </div>
     <textarea
+      ref="input"
       :value="sourceText"
       autofocus
       aria-label="原文输入"
@@ -67,22 +87,21 @@ const namingStyleOptions = ["camelCase", "PascalCase", "snake_case", "kebab-case
       :maxlength="maxInputLength"
       :placeholder="mode === 'naming' ? '描述你想命名的内容' : '输入或粘贴文本'"
       @input="emit('update:sourceText', ($event.target as HTMLTextAreaElement).value)"
-      @paste="emit('paste')"
-      @keydown.ctrl.enter.prevent="emit('submit')"
+      @keydown.ctrl.enter.prevent="run"
     />
     <div class="composer-footer">
       <template v-if="mode === 'naming'">
         <label>类型
-          <UiSelect class="naming-select" :model-value="namingOptions.type" :options="namingTypeOptions" label="类型" @update:model-value="patchNaming({ type: $event as NamingOptions['type'] })" />
+          <UiSelect class="naming-select" :model-value="namingOptions.type" :options="namingTypeOptions" label="类型" @update:model-value="changeNamingType($event as NamingOptions['type'])" />
         </label>
         <label>风格
           <UiSelect class="naming-select naming-style-select" :model-value="namingOptions.style" :options="namingStyleOptions" label="风格" @update:model-value="patchNaming({ style: $event as NamingOptions['style'] })" />
         </label>
       </template>
-      <span v-else-if="sourceText" class="input-count">{{ sourceText.length.toLocaleString() }} / {{ maxInputLength.toLocaleString() }}</span>
+      <span v-else-if="sourceText.length >= maxInputLength * .85" class="input-count">{{ sourceText.length.toLocaleString() }} / {{ maxInputLength.toLocaleString() }}</span>
       <div class="composer-actions">
-        <button v-if="sourceText" class="clear-input" type="button" aria-label="清空输入" @click="emit('clear')">×</button>
-        <button class="send-button" type="button" :disabled="isRunning || !sourceText.trim()" :aria-label="mode === 'naming' ? '生成名称' : '开始翻译'" :title="mode === 'naming' ? '生成名称（Ctrl+Enter）' : '翻译（Ctrl+Enter）'" @click="emit('submit')">{{ isRunning ? '…' : '↗' }}</button>
+        <button v-if="sourceText || canUndo" class="text-button" type="button" @click="clearOrUndo">{{ sourceText ? '清空输入' : '撤销清空' }}</button>
+        <button class="primary-button send-button" type="button" :disabled="!isRunning && !sourceText.trim()" title="Ctrl+Enter" @click="run">{{ isRunning ? '停止' : mode === 'naming' ? '生成名称' : '开始翻译' }}</button>
       </div>
     </div>
   </section>
@@ -92,10 +111,9 @@ const namingStyleOptions = ["camelCase", "PascalCase", "snake_case", "kebab-case
 .workbench-composer {
   display: flex; flex-direction: column; min-height: 120px;
   border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
-  transition: min-height .2s ease, border-color .18s ease;
+  transition: border-color var(--motion-control) var(--motion-ease);
 }
 .workbench-composer:focus-within { border-color: var(--border-strong); box-shadow: inset 0 0 0 1px rgba(95,154,108,.12); }
-.workbench-composer.compact { min-height: 88px; }
 .language-row {
   display: flex; align-items: center; gap: 8px; padding: 10px 14px 0;
   color: var(--muted); font-size: 13px;
@@ -119,12 +137,10 @@ const namingStyleOptions = ["camelCase", "PascalCase", "snake_case", "kebab-case
 .naming-select :deep(.ui-select__trigger) { min-height: 30px; padding: 3px 9px; border-radius: 7px; background: var(--surface-soft); font-size: 12px; }
 .input-count { margin-right: auto; font-variant-numeric: tabular-nums; }
 .composer-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.clear-input, .send-button {
-  width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 999px;
+.send-button { min-width: 76px; }
+@media (max-width: 620px) {
+  .composer-footer { flex-wrap: wrap; }
+  .naming-select { width: 102px; }
+  .naming-style-select { width: 130px; }
 }
-.clear-input { color: var(--muted); background: transparent; font-size: 16px; }
-.clear-input:hover { color: var(--ink); background: var(--surface-soft); }
-.send-button { color: white; background: var(--accent); font-size: 16px; }
-.send-button:hover:not(:disabled) { background: var(--accent-strong); }
-.send-button:disabled { opacity: .55; }
 </style>

@@ -13,7 +13,9 @@ const emit = defineEmits<{ "update:category": [value: SettingsCategory] }>();
         <h1>{{ title }}</h1>
         <p>{{ description }}</p>
       </header>
-      <slot />
+      <Transition name="content" @leave="(_, done) => done()">
+        <div :key="category"><slot /></div>
+      </Transition>
     </div>
   </div>
 </template>
