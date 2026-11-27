@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onDeactivated, ref } from "vue";
 
 export interface UiSelectOption {
   value: string;
@@ -49,9 +49,9 @@ function updatePosition(): void {
   menuStyle.value = {
     left: `${Math.round(bounds.left)}px`,
     width: `${Math.round(bounds.width)}px`,
-    maxHeight: `${Math.max(112, Math.min(264, placeAbove ? bounds.top - 12 : roomBelow))}px`,
+    maxHeight: `${Math.max(0, Math.min(264, placeAbove ? bounds.top - 12 : roomBelow))}px`,
     ...(placeAbove
-      ? { bottom: `${Math.round(window.innerHeight - bounds.top + 6)}px` }
+      ? { bottom: `${Math.round(window.innerHeight - bounds.top + 6)}px`, "--menu-origin": "bottom", "--menu-offset": "3px" }
       : { top: `${Math.round(bounds.bottom + 6)}px` })
   };
 }
@@ -77,10 +77,13 @@ async function show(): Promise<void> {
   if (props.disabled || open.value) return;
   const current = props.options.findIndex((option) => option.value === props.modelValue && !option.disabled);
   highlightedIndex.value = current >= 0 ? current : selectableIndex(0, 1);
+  updatePosition();
   open.value = true;
   await nextTick();
-  updatePosition();
-  addWindowListeners();
+  if (open.value) {
+    addWindowListeners();
+    document.getElementById(`${listboxId}-${highlightedIndex.value}`)?.scrollIntoView({ block: "nearest" });
+  }
 }
 
 function close(): void {
@@ -125,13 +128,16 @@ function onKeydown(event: KeyboardEvent): void {
     void show();
     return;
   }
-  if (event.key === "Escape") {
+  if (event.key === "Tab") close();
+  if (event.key === "Escape" && open.value) {
     event.preventDefault();
+    event.stopPropagation();
     close();
   }
 }
 
 onBeforeUnmount(removeWindowListeners);
+onDeactivated(close);
 </script>
 
 <template>
@@ -155,7 +161,7 @@ onBeforeUnmount(removeWindowListeners);
     </button>
 
     <Teleport to="body">
-      <Transition name="select-menu">
+      <Transition name="menu">
         <div
           v-if="open"
           :id="listboxId"
@@ -164,6 +170,7 @@ onBeforeUnmount(removeWindowListeners);
           role="listbox"
           :aria-label="label"
           :style="menuStyle"
+          :inert="!open"
           @keydown="onKeydown"
         >
           <button
@@ -172,10 +179,12 @@ onBeforeUnmount(removeWindowListeners);
             :key="option.value"
             type="button"
             role="option"
+            tabindex="-1"
             :aria-selected="option.value === modelValue"
             :disabled="option.disabled"
             :class="{ highlighted: index === highlightedIndex }"
-            @pointerenter="highlightedIndex = index"
+            @pointerenter="!option.disabled && (highlightedIndex = index)"
+            @pointerdown.prevent
             @click="choose(option)"
           >
             <span>{{ option.label }}</span>
@@ -193,7 +202,7 @@ onBeforeUnmount(removeWindowListeners);
   width: 100%; min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 7px 11px 7px 12px; border: 1px solid var(--border); border-radius: 8px;
   color: var(--ink); background: var(--surface); text-align: left; cursor: pointer;
-  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+  transition: border-color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease);
 }
 .ui-select__trigger:hover { border-color: var(--border-strong); background: var(--surface-hover); }
 .ui-select.open .ui-select__trigger,
@@ -202,15 +211,14 @@ onBeforeUnmount(removeWindowListeners);
 .ui-select__trigger .placeholder { color: var(--muted); }
 .ui-select__trigger i {
   width: 7px; height: 7px; flex: 0 0 auto; border: solid currentColor; border-width: 0 1.5px 1.5px 0;
-  color: var(--muted); transform: rotate(45deg) translateY(-2px); transition: transform .16s ease;
+  color: var(--muted); transform: rotate(45deg) translateY(-2px); transition: transform var(--motion-control) var(--motion-ease);
 }
 .ui-select.open .ui-select__trigger i { transform: rotate(225deg) translate(-1px, -1px); }
 .ui-select.disabled { opacity: .5; }
 .ui-select__menu {
-  position: fixed; z-index: var(--z-popover); overflow: auto; padding: 5px;
-  border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.98);
-  box-shadow: 0 14px 36px rgba(53,62,50,.15), 0 2px 8px rgba(53,62,50,.08);
-  backdrop-filter: blur(18px);
+  position: fixed; z-index: var(--z-popover, 40); overflow: auto; padding: 5px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-solid);
+  box-shadow: var(--shadow-float);
 }
 .ui-select__menu button {
   width: 100%; min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -221,6 +229,4 @@ onBeforeUnmount(removeWindowListeners);
 .ui-select__menu button.highlighted { color: var(--ink); background: var(--surface-soft); }
 .ui-select__menu button[aria-selected="true"] { color: var(--accent-strong); background: var(--accent-faint); font-weight: 600; }
 .ui-select__menu button b { color: var(--accent-strong); font-size: 12px; }
-.select-menu-enter-active, .select-menu-leave-active { transition: opacity .14s ease, transform .14s ease; transform-origin: top; }
-.select-menu-enter-from, .select-menu-leave-to { opacity: 0; transform: translateY(-3px) scale(.985); }
 </style>

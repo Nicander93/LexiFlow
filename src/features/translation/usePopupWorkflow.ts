@@ -20,6 +20,7 @@ export function usePopupWorkflow() {
   const profileId = ref("technical");
   const defaultTranslationProfileId = ref("technical");
   const { copied, markCopied, resetCopied } = useCopyFeedback(1_000);
+  const copiedText = ref("");
   const sourceExpanded = ref(true);
   const popupShell = ref<HTMLElement>();
   const translator = getTranslatorApi();
@@ -60,7 +61,8 @@ export function usePopupWorkflow() {
   const showDictionaryTab = computed(() => dictionaryStatus.value === "found" && Boolean(dictionaryResult.value?.entry));
 
   async function run(): Promise<void> {
-    if (!sourceText.value.trim()) return;
+    if (!sourceText.value.trim() || isRunning.value) return;
+    captureError.value = "";
     hoveredSegmentId.value = undefined;
     lockedSegmentId.value = undefined;
     await start({
@@ -89,7 +91,7 @@ export function usePopupWorkflow() {
 
   async function handlePayloadText(text: string, preferredMode: TranslationMode, sequence: number): Promise<void> {
     sourceText.value = text;
-    if (!shouldLookupDictionary(text)) {
+    if (preferredMode === "naming" || !shouldLookupDictionary(text)) {
       resetDictionary();
       popupView.value = preferredMode;
       mode.value = preferredMode;
@@ -113,13 +115,18 @@ export function usePopupWorkflow() {
   async function copy(text = displayResult.value): Promise<void> {
     if (!text) return;
     await translator.clipboard.writeText(text);
+    copiedText.value = text;
     markCopied();
   }
 
   function close(): void { stop(); translator.window.closePopup(); }
   function togglePin(): void { pinned.value = !pinned.value; translator.window.pinPopup(pinned.value); }
   function openMain(): void {
-    translator.window.openMain(mode.value === "naming" ? "/?mode=naming" : "/");
+    if (!sourceText.value.trim()) return;
+    translator.window.openMain({
+      route: mode.value === "naming" ? "/?mode=naming" : "/",
+      draft: { text: sourceText.value, requestId: status.value === "success" ? result.value?.requestId : undefined }
+    });
   }
   function handleKeydown(event: KeyboardEvent): void { if (event.key === "Escape") close(); }
 
@@ -147,6 +154,7 @@ export function usePopupWorkflow() {
       syncProfileForMode(payload.mode, payload.profileId);
       capturing.value = Boolean(payload.capturing);
       captureError.value = payload.error ?? "";
+      sourceText.value = payload.text ?? "";
       hoveredSegmentId.value = undefined;
       lockedSegmentId.value = undefined;
       lastAdaptedKey = "";
@@ -168,7 +176,7 @@ export function usePopupWorkflow() {
   });
 
   return {
-    mode, popupView, sourceText, captureError, capturing, pinned, profiles, profileId, copied, sourceExpanded, popupShell,
+    mode, popupView, sourceText, captureError, capturing, pinned, profiles, profileId, copied, copiedText, sourceExpanded, popupShell,
     status, resultText, result, errorMessage, warningMessage, isRunning, retry, displayResult, namingResult, activeSegmentId, hasStructuredResult, showDictionaryTab, dictionaryResult,
     run, selectView, triggerAiTranslate, copy, close, togglePin, openMain, handleSegmentHover, toggleSegment, clearSegmentLock, navigateSegment, stop
   };

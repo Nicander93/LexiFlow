@@ -2,7 +2,7 @@ import type { AppSettings, SettingsPatch, SettingsSnapshot } from "./settings";
 import type { CaptureScreenOptions, CaptureScreenResult, OcrResult, OcrScreen, RecognizeRegionRequest } from "./ocr";
 import type { DictionaryContextEvent, DictionaryContextRequest, DictionaryLookupRequest, DictionaryLookupResult, DictionaryStatus } from "./dictionary";
 import type { GlossaryConflict, GlossaryEntry, GlossaryExportResult, GlossaryImportResult } from "./glossary";
-import type { PopupPayload } from "./window";
+import type { PopupPayload, WindowNavigation } from "./window";
 import type { ProviderHealth, ProviderModel, RuntimeInfo, SelectionResult, ShortcutRegistrationResult } from "./runtime";
 import type { SegmentAlternativeEvent, SegmentAlternativeRequest, SegmentRevisionEvent, SegmentRevisionRequest, SelectionTranslationRequest, TranslationEvent, TranslationProfile, TranslationRequest, TranslationSession } from "./translation";
 import type { DocumentExportRequest, DocumentImportRequest, DocumentTaskEvent, DocumentTaskRecord } from "./document";
@@ -78,11 +78,11 @@ export interface TranslatorApi {
   };
   clipboard: { writeText: (text: string) => Promise<void> };
   window: {
-    openMain: (route?: string) => void;
+    openMain: (navigation?: string | WindowNavigation) => void;
     closePopup: () => void;
     pinPopup: (pinned: boolean) => void;
     adaptPopupHeight: (kind?: "dictionary" | "translation" | "naming" | "default", contentHeight?: number) => void;
     onPopupPayload: (listener: (payload: PopupPayload) => void) => () => void;
-    onNavigate: (listener: (route: string) => void) => () => void;
+    onNavigate: (listener: (navigation: WindowNavigation) => void) => () => void;
   };
 }

@@ -2,7 +2,7 @@
 import AppIcon from "../../components/AppIcon.vue";
 import type { NamingResult } from "../../../electron/shared/types";
 
-defineProps<{ result: NamingResult }>();
+defineProps<{ result: NamingResult; copiedName?: string }>();
 const emit = defineEmits<{ copy: [name: string]; regenerate: [] }>();
 </script>
 
@@ -17,10 +17,10 @@ const emit = defineEmits<{ copy: [name: string]; regenerate: [] }>();
     >
       <code>{{ candidate.name }}</code>
       <span>{{ candidate.meaning }}</span>
-      <AppIcon name="copy" :size="14" />
+      <AppIcon :key="copiedName === candidate.name ? 'check' : 'copy'" :name="copiedName === candidate.name ? 'check' : 'copy'" :class="{ 'feedback-icon': copiedName === candidate.name }" :size="14" />
     </button>
     <footer>
-      <span>已生成 {{ result.candidates.length }} 个命名建议</span>
+      <span role="status">{{ copiedName ? `已复制 ${copiedName}` : `已生成 ${result.candidates.length} 个命名建议` }}</span>
       <button type="button" class="regen" @click="emit('regenerate')">重新生成</button>
     </footer>
   </section>
@@ -35,6 +35,7 @@ const emit = defineEmits<{ copy: [name: string]; regenerate: [] }>();
 }
 .naming-results > button:hover { background: var(--accent-soft); }
 .naming-results > button.recommended code { color: var(--accent-strong); font-weight: 650; }
+.naming-results code, .naming-results span { min-width: 0; overflow-wrap: anywhere; }
 .naming-results span { color: var(--muted); font-size: 13px; }
 footer {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -45,4 +46,9 @@ footer {
   color: var(--ink-soft); background: var(--surface); font-size: 12px; cursor: pointer;
 }
 .regen:hover { background: var(--surface-soft); }
+@media (max-width: 460px) {
+  .naming-results > button { grid-template-columns: minmax(0, 1fr) 16px; gap: 4px 12px; }
+  .naming-results > button span { grid-row: 2; }
+  .naming-results > button .app-icon { grid-area: 1 / 2 / 3; }
+}
 </style>

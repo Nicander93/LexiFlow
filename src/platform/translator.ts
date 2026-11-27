@@ -1,6 +1,6 @@
 import type { TranslatorApi } from "../../electron/shared/api";
 import { DEFAULT_SETTINGS } from "../../electron/shared/defaults";
-import type { DictionaryContextEvent, DocumentTaskRecord, ProviderModel, SegmentAlternativeEvent, SegmentRevisionEvent, TranslationEvent, TranslationHistory, VocabularyEntry } from "../../electron/shared/types";
+import type { DictionaryContextEvent, DocumentTaskRecord, ProviderModel, SegmentAlternativeEvent, SegmentRevisionEvent, TranslationEvent, TranslationHistory, VocabularyEntry, WindowNavigation } from "../../electron/shared/types";
 import { previewDictionaryLookup } from "./dictionary-preview";
 import { resolveTargetLanguage } from "../../electron/shared/language";
 
@@ -27,6 +27,7 @@ export function installBrowserPreviewApi(): void {
   let settingsRevision = 0;
   const previewUuid = (): string => globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const listeners = new Set<(event: TranslationEvent) => void>();
+  const navigationListeners = new Set<(navigation: WindowNavigation) => void>();
   const revisionListeners = new Set<(event: SegmentRevisionEvent) => void>();
   const selectionTranslationListeners = new Set<(event: TranslationEvent) => void>();
   const selectionTranslationTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -157,7 +158,7 @@ export function installBrowserPreviewApi(): void {
     },
     translation: {
       getSession: async () => undefined,
-      openHistorySession: async () => false,
+      openHistorySession: async (id) => history.some((item) => item.id === id),
       start: async (request) => {
         const requestId = previewUuid();
         queueMicrotask(() => listeners.forEach((listener) => listener({ requestId, status: "loading" })));
@@ -354,7 +355,7 @@ export function installBrowserPreviewApi(): void {
       cancel: async () => undefined,
       onEvent: () => () => undefined
     },
-    privacy: { clearLocalData: async () => { history.splice(0); vocabulary.splice(0); } },
+    privacy: { clearLocalData: async () => { history.splice(0); vocabulary.splice(0); documents.splice(0); } },
     diagnostics: { exportReport: async () => ({ saved: false }) },
     ocr: {
       listScreens: async () => [],
@@ -367,7 +368,10 @@ export function installBrowserPreviewApi(): void {
       writeText: async (text) => navigator.clipboard?.writeText(text)
     },
     window: {
-      openMain: () => undefined,
+      openMain: (navigation) => {
+        const target = typeof navigation === "object" ? navigation : { route: navigation ?? "/" };
+        navigationListeners.forEach((listener) => listener(target));
+      },
       closePopup: () => undefined,
       pinPopup: () => undefined,
       adaptPopupHeight: () => undefined,
@@ -375,7 +379,10 @@ export function installBrowserPreviewApi(): void {
         popupPayloadListeners.add(listener);
         return () => popupPayloadListeners.delete(listener);
       },
-      onNavigate: () => () => undefined
+      onNavigate: (listener) => {
+        navigationListeners.add(listener);
+        return () => navigationListeners.delete(listener);
+      }
     }
   };
 

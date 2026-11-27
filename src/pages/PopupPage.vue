@@ -20,7 +20,7 @@ const selectionTranslation = useSelectionTranslation(popup.profileId);
 const { sourceText: selectedSource, state: selectionState, targetLanguage: selectionTarget, copied: selectionCopied } = selectionTranslation;
 const { currentQuery: selectedTerm, result: selectedDictionary, status: selectedDictionaryStatus, lookupImmediate, reset: resetSelectedDictionary } = useDictionary(0);
 const {
-  popupView, sourceText, captureError, capturing, pinned, copied, popupShell, status, result, errorMessage,
+  popupView, sourceText, captureError, capturing, pinned, copied, copiedText, popupShell, status, result, errorMessage,
   warningMessage, isRunning, retry, displayResult, namingResult, activeSegmentId, hasStructuredResult,
   dictionaryResult, run, triggerAiTranslate, copy, close: closePopup, togglePin, openMain, handleSegmentHover,
   toggleSegment, clearSegmentLock, navigateSegment, stop
@@ -63,25 +63,26 @@ function saveWord(entry: DictionaryEntry): void {
     <header class="popup-header drag-region">
       <span class="popup-brand"><BrandLogo compact /></span>
       <div class="popup-window-actions no-drag">
-        <button type="button" :title="pinned ? '取消固定' : '固定窗口'" :class="{ active: pinned }" @click="togglePin">📌</button>
-        <button type="button" title="关闭 (Esc)" @click="close">×</button>
+        <button type="button" aria-label="固定窗口" :aria-pressed="pinned" :title="pinned ? '取消固定' : '固定窗口'" :class="{ active: pinned }" @click="togglePin"><AppIcon name="pin" :size="15" /></button>
+        <button type="button" title="关闭 (Esc)" aria-label="关闭快速翻译" @click="close">×</button>
       </div>
     </header>
-    <section v-if="capturing" class="popup-state"><span class="spinner" />正在读取选中文字</section>
+    <section v-if="capturing" class="popup-state" role="status"><span class="spinner" />正在读取选中文字</section>
     <section v-else-if="captureError" class="popup-manual">
       <p>{{ captureError }}</p>
-      <textarea v-model="sourceText" data-selection-text autofocus placeholder="粘贴或输入文本" @keydown.ctrl.enter.prevent="run" />
-      <button type="button" class="primary-button" @click="run">翻译</button>
+      <textarea v-model="sourceText" data-selection-text autofocus aria-label="原文输入" placeholder="粘贴或输入文本" @keydown.ctrl.enter.prevent="run" />
+      <button type="button" class="primary-button" :disabled="!sourceText.trim()" @click="run">翻译</button>
     </section>
     <template v-else>
       <section class="popup-source-vnext"><p data-selection-text>{{ sourceText }}</p></section>
       <section class="popup-result-vnext">
         <DictionaryCompactCard v-if="popupView === 'dictionary' && dictionaryResult?.entry" :entry="dictionaryResult.entry" @ai-translate="triggerAiTranslate" @save-word="saveWord" />
-        <div v-else-if="status === 'loading'" class="popup-state"><span class="soft-loader"><i /><i /><i /></span>正在翻译</div>
-        <div v-else-if="status === 'error'" class="popup-error">{{ errorMessage }} <button type="button" @click="retry">重试</button></div>
+        <div v-else-if="status === 'loading'" class="popup-state" role="status"><span class="soft-loader"><i /><i /><i /></span>正在翻译</div>
+        <div v-else-if="status === 'error'" class="popup-error" role="alert">{{ errorMessage }} <button type="button" @click="retry">重试</button></div>
+        <div v-else-if="status === 'cancelled' && !displayResult" class="popup-state" role="status">已停止翻译 <button class="text-button" type="button" @click="retry">重新翻译</button></div>
         <div v-else-if="namingResult" class="popup-candidates">
           <button v-for="candidate in namingResult.candidates" :key="candidate.name" type="button" @click="copy(candidate.name)">
-            <code>{{ candidate.name }}</code><small>{{ candidate.meaning }}</small>
+            <code>{{ candidate.name }}</code><small>{{ candidate.meaning }}</small><AppIcon :name="copied && copiedText === candidate.name ? 'check' : 'copy'" :size="14" />
           </button>
         </div>
         <SegmentedText
@@ -96,28 +97,28 @@ function saveWord(entry: DictionaryEntry): void {
           @navigate="navigateSegment"
         />
         <pre v-else data-selection-text>{{ displayResult }}</pre>
-        <SelectionTranslationPanel
+        <Transition name="panel"><SelectionTranslationPanel
           v-if="selectedSource"
           :source-text="selectedSource" :state="selectionState" :target-language="selectionTarget" :copied="selectionCopied"
           @close="selectionTranslation.close" @cancel="selectionTranslation.cancel"
           @retry="selectionTranslation.start(selectedSource)" @copy="selectionTranslation.copy"
-        />
-        <section v-if="selectedTerm" class="popup-selected-dictionary" aria-label="选词词典">
+        /></Transition>
+        <Transition name="panel"><section v-if="selectedTerm" class="popup-selected-dictionary" aria-label="选词词典">
           <header><strong>英语词典 · {{ selectedTerm }}</strong><button type="button" aria-label="关闭选词词典" @click="resetSelectedDictionary">×</button></header>
           <DictionaryCompactCard v-if="selectedDictionary?.entry" :entry="selectedDictionary.entry" @ai-translate="translateSelection(selectedTerm)" @save-word="saveWord" />
           <p v-else-if="selectedDictionaryStatus === 'loading'" class="muted">正在查词…</p>
           <p v-else class="muted">{{ selectedDictionary?.unavailableReason ?? '英语词典未收录。' }} <button class="text-button" type="button" @click="translateSelection(selectedTerm)">翻译选中内容</button></p>
-        </section>
+        </section></Transition>
         <p v-if="warningMessage" class="popup-warning">{{ warningMessage }}</p>
         <p v-if="vocabulary.notice.value" class="popup-vocabulary-notice">{{ vocabulary.notice.value }}</p>
       </section>
     </template>
     <footer class="popup-actions">
-      <button type="button" class="open-main" @click="openMain">在主窗口打开 ↗</button>
+      <button type="button" class="open-main" :disabled="capturing || !sourceText.trim()" @click="openMain">在主窗口打开 ↗</button>
       <div>
-        <button v-if="isRunning" type="button" title="停止" @click="stop"><AppIcon name="stop" :size="15" /></button>
+        <button v-if="isRunning" type="button" title="停止" aria-label="停止翻译" @click="stop"><AppIcon name="stop" :size="15" /></button>
         <SpeechButton v-if="displayResult && !namingResult" :text="displayResult" :language="result?.targetLanguage" icon-only label="朗读译文" />
-        <button type="button" :disabled="!displayResult" title="复制译文" @click="copy()"><AppIcon :name="copied ? 'check' : 'copy'" :size="15" /></button>
+        <button v-if="displayResult && !namingResult" type="button" :aria-label="copied ? '已复制译文' : '复制译文'" :title="copied ? '已复制' : '复制译文'" @click="copy()"><AppIcon :name="copied ? 'check' : 'copy'" :size="15" /></button>
       </div>
     </footer>
   </div>
@@ -142,8 +143,8 @@ function saveWord(entry: DictionaryEntry): void {
 .popup-window-actions button:hover, .popup-actions button:hover { color: var(--ink); background: var(--surface-soft); }
 .popup-window-actions button.active { color: var(--accent-strong); background: var(--accent-soft); }
 .popup-source-vnext, .popup-result-vnext { padding: 12px 14px; }
-.popup-source-vnext { flex: 0 0 auto; border-bottom: 1px solid var(--border); color: var(--ink-soft); font-size: 13px; }
-.popup-source-vnext p { margin: 0; white-space: pre-wrap; }
+.popup-source-vnext { flex: 0 0 auto; max-height: min(36dvh, 120px); overflow: auto; scrollbar-width: thin; border-bottom: 1px solid var(--border); color: var(--ink-soft); font-size: 13px; }
+.popup-source-vnext p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .popup-result-vnext { flex: 1; min-height: 0; overflow: auto; color: var(--ink); font-size: 14px; line-height: 1.65; }
 .popup-result-vnext pre { margin: 0; white-space: pre-wrap; font-family: inherit; }
 .popup-selected-dictionary { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
@@ -166,9 +167,11 @@ function saveWord(entry: DictionaryEntry): void {
 .popup-vocabulary-notice { margin: 9px 0 0; color: var(--accent-strong); font-size: 12px; }
 .popup-candidates { display: grid; gap: 6px; }
 .popup-candidates button {
-  display: grid; gap: 2px; border: 0; border-radius: 8px; padding: 8px 10px; text-align: left;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; border: 0; border-radius: 8px; padding: 8px 10px; text-align: left;
   background: var(--surface-soft); cursor: pointer;
 }
+.popup-candidates code, .popup-candidates small { grid-column: 1; overflow-wrap: anywhere; }
+.popup-candidates .app-icon { grid-column: 2; grid-row: 1 / 3; align-self: center; }
 .popup-candidates button:hover { background: var(--accent-soft); }
-.popup-manual { display: grid; gap: 10px; padding: 14px; }
+.popup-manual { flex: 1; min-height: 0; overflow: auto; display: grid; gap: 10px; padding: 14px; }
 </style>

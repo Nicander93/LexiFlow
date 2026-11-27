@@ -22,6 +22,7 @@ const props = defineProps<{
   segments: TranslationSegment[];
   activeSegmentId?: string;
   copied: boolean;
+  copiedName?: string;
   dictionaryNote?: string;
   sourceLanguage?: string;
   targetLanguage?: string;
@@ -48,6 +49,8 @@ const showPanelFallback = computed(() => props.resultType === "loading" || props
 </script>
 
 <template>
+  <div class="result-stage">
+  <Transition name="content" @leave="(_, done) => done()">
   <section v-if="resultType === 'empty'" class="workbench-empty">
     <div class="empty-illustration" aria-hidden="true">
       <div class="plant"><i /><i /><b /></div>
@@ -62,6 +65,7 @@ const showPanelFallback = computed(() => props.resultType === "loading" || props
   <NamingResultView
     v-else-if="resultType === 'naming' && namingResult"
     :result="namingResult"
+    :copied-name="copiedName"
     @copy="emit('copy-naming', $event)"
     @regenerate="emit('regenerate')"
   />
@@ -107,6 +111,7 @@ const showPanelFallback = computed(() => props.resultType === "loading" || props
     v-else-if="showPanelFallback || displayResultText || status !== 'idle'"
     class="workbench-result"
     :status="status"
+    :stop-in-composer="true"
     :text="displayResultText"
     :source-text="sourceText"
     :error="errorMessage"
@@ -127,10 +132,13 @@ const showPanelFallback = computed(() => props.resultType === "loading" || props
     @select-term="(term, id) => emit('select-term', term, id)"
   />
 
+  </Transition>
   <p v-if="dictionaryNote" class="dictionary-note">{{ dictionaryNote }}</p>
+  </div>
 </template>
 
 <style scoped>
+.result-stage { display: flex; flex: 1 0 auto; flex-direction: column; min-width: 0; }
 .workbench-empty {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-height: 200px; padding-bottom: 28px; color: var(--muted);

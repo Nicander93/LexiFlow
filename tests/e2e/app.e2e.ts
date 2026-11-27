@@ -12,7 +12,7 @@ let e2eUserDataDir: string;
 const require = createRequire(import.meta.url);
 const packagedExecutable = process.env.LEXIFLOW_EXECUTABLE;
 const electronExecutable = packagedExecutable || require("electron") as string;
-const uiVerificationDir = resolve("artifacts", "ui-verification");
+const uiVerificationDir = resolve("test-results", "ui-verification");
 
 /** Windows CI/desktop GPU stacks often crash Chromium; keep LEXIFLOW_E2E sandbox/HWACCEL off and force software path. */
 const E2E_GPU_ARGS = ["--disable-gpu", "--disable-software-rasterizer", "--in-process-gpu"];
@@ -176,7 +176,7 @@ test("preload contract and primary routes render", async () => {
   expect(await mainWindow.getByPlaceholder("输入或粘贴文本").evaluate((element) => getComputedStyle(element).outlineStyle)).toBe("none");
   await saveUiScreenshot(mainWindow, "workbench-empty.png");
 
-  await mainWindow.getByRole("button", { name: /翻译|代码命名/ }).first().click();
+  await mainWindow.getByRole("combobox", { name: "工作台模式" }).click();
   await mainWindow.getByRole("option", { name: "代码命名" }).click();
   await expect(mainWindow.getByLabel("类型")).toBeVisible();
   await expect(mainWindow.getByLabel("风格")).toBeVisible();
@@ -243,7 +243,7 @@ test("local dictionary lookup shows card without requiring a model", async () =>
   await saveUiScreenshot(mainWindow, "dictionary.png");
 });
 
-test("internal selections translate independently in both directions", async () => {
+async function stubSelectionTranslation(): Promise<void> {
   await electronApp.evaluate(({ ipcMain }, channels) => {
     ipcMain.removeHandler(channels.selectionTranslationStart);
     ipcMain.handle(channels.selectionTranslationStart, (event, request) => {
@@ -254,6 +254,10 @@ test("internal selections translate independently in both directions", async () 
       return id;
     });
   }, IPC_CHANNELS);
+}
+
+test("internal selections translate independently in both directions", async () => {
+  await stubSelectionTranslation();
   await mainWindow.getByRole("button", { name: "历史记录" }).click();
   await mainWindow.locator(".drawer-item").filter({ hasText: "Chinese selection fixture." }).click();
   const target = mainWindow.locator(".simple-target .translation-segment");
@@ -537,6 +541,7 @@ test("API keys stay masked and never enter settings JSON as plaintext", async ()
 });
 
 test("popup selections use the internal toolbar and reset on a new payload", async () => {
+  await stubSelectionTranslation();
   const popup = await popupPage();
   const sendPayload = () => electronApp.evaluate(({ BrowserWindow }, input) => {
     const window = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes("#/popup"));
@@ -563,6 +568,10 @@ test("popup selections use the internal toolbar and reset on a new payload", asy
   await popup.getByRole("button", { name: "翻译选中内容", exact: true }).click();
   await sendPayload();
   await expect(popup.getByRole("region", { name: "选中内容翻译" })).toHaveCount(0);
+  await mainWindow.getByRole("textbox", { name: "原文输入" }).fill("Previous main-window draft");
+  await popup.getByRole("button", { name: /在主窗口打开/ }).click();
+  await expect(mainWindow.getByRole("textbox", { name: "原文输入" })).toHaveValue("sorry");
+  await expect(mainWindow.getByRole("heading", { name: "sorry" })).toBeVisible();
 });
 
 test("popup streaming layout does not persist automatic bounds", async () => {
@@ -691,13 +700,23 @@ test("native OCR smoke recognizes only the selected screen region", async () => 
   test.skip(process.env.LEXIFLOW_E2E_NATIVE_OCR !== "1", "Set LEXIFLOW_E2E_NATIVE_OCR=1 to run the desktop OCR smoke test.");
   test.setTimeout(45_000);
 
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const main = BrowserWindow.getAllWindows().find((window) => window.webContents.getURL().endsWith("#/"));
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.webContents.getURL().includes("#/popup")) window.hide();
+    }
+    main?.setAlwaysOnTop(true, "screen-saver");
+    main?.show();
+    main?.focus();
+  });
+
   await mainWindow.evaluate(() => {
     document.querySelector("#lexiflow-ocr-smoke")?.remove();
     const marker = document.createElement("div");
     marker.id = "lexiflow-ocr-smoke";
     marker.textContent = "LEXIFLOW OCR SMOKE";
     Object.assign(marker.style, {
-      position: "fixed", left: "48px", top: "110px", width: "720px", height: "120px",
+      position: "fixed", left: "24px", top: "110px", width: "min(720px, calc(100vw - 48px))", height: "120px",
       zIndex: "2147483647", display: "grid", placeItems: "center", background: "white", color: "black",
       font: "bold 56px Arial", letterSpacing: "2px", border: "4px solid black"
     });
@@ -750,9 +769,11 @@ test("native OCR smoke recognizes only the selected screen region", async () => 
       const api = (globalThis as unknown as Window & { translator?: TranslatorApi }).translator!;
       return api.ocr.recognizeRegion({ captureId, region });
     }, { captureId: captured.captureId, region: { x, y, width: right - x, height: bottom - y } });
-    expect(`${result.text}\n${result.blocks.map((block) => block.text).join("\n")}`).toMatch(/OCR|LEXIFLOW/i);
+    expect(/OCR|LEXIFLOW/i.test(result.text), "The captured region must contain the test window marker").toBe(true);
   } finally {
     await mainWindow.evaluate(() => document.querySelector("#lexiflow-ocr-smoke")?.remove());
+    const browserWindow = await electronApp.browserWindow(mainWindow);
+    await browserWindow.evaluate((window) => window.setAlwaysOnTop(false));
   }
 });
 
@@ -775,15 +796,52 @@ test("history overlay restores a stored session without route change", async () 
   expect(session?.historyId).toBe("e2e-history");
 });
 
+test("drafts survive navigation, clearing is reversible, and document deletion waits for confirmation", async () => {
+  const source = mainWindow.getByRole("textbox", { name: "原文输入" });
+  await source.fill("A draft to keep while checking settings.");
+  await mainWindow.getByRole("link", { name: "设置" }).click();
+  await mainWindow.getByRole("button", { name: "返回翻译" }).click();
+  await expect(source).toHaveValue("A draft to keep while checking settings.");
+  await mainWindow.getByRole("button", { name: "清空输入" }).click();
+  await expect(source).toHaveValue("");
+  await mainWindow.getByRole("button", { name: "撤销清空" }).click();
+  await expect(source).toHaveValue("A draft to keep while checking settings.");
+
+  await mainWindow.getByRole("button", { name: "历史记录" }).click();
+  await expect(mainWindow.getByRole("searchbox", { name: "搜索历史记录" })).toBeFocused();
+  await mainWindow.keyboard.press("Escape");
+  await expect(mainWindow.getByRole("button", { name: "历史记录" })).toBeFocused();
+
+  await mainWindow.getByRole("link", { name: "文档翻译" }).click();
+  const task = mainWindow.locator(".document-task").filter({ hasText: "fixture.txt" });
+  await expect(task.getByRole("progressbar")).toHaveAttribute("aria-valuemax", "1");
+  await task.getByRole("button", { name: "删除任务 fixture.txt" }).click();
+  await expect(task.getByRole("button", { name: "返回", exact: true })).toBeFocused();
+  await mainWindow.keyboard.press("Escape");
+  await expect(task.getByRole("button", { name: "删除任务 fixture.txt" })).toBeFocused();
+  await expect(task).toBeVisible();
+  await mainWindow.getByRole("button", { name: "返回翻译" }).click();
+});
+
 test("clearing local data removes history, documents, and vocabulary", async () => {
-  const remaining = await mainWindow.evaluate(async () => {
+  await mainWindow.getByRole("textbox", { name: "原文输入" }).fill("Private draft for the data reset check.");
+  await mainWindow.evaluate(async () => {
     const api = (window as Window & { translator?: TranslatorApi }).translator!;
     await api.documents.start("e2e-document-task").catch(() => undefined);
-    await api.privacy.clearLocalData();
-    return { tasks: (await api.documents.list()).length, vocabulary: (await api.vocabulary.list()).length };
   });
-  expect(remaining).toEqual({ tasks: 0, vocabulary: 0 });
-  await mainWindow.evaluate(() => { location.hash = "#/"; });
+  await mainWindow.getByRole("link", { name: "设置" }).click();
+  await mainWindow.getByRole("button", { name: "高级", exact: true }).click();
+  await mainWindow.getByRole("button", { name: "清除本地数据" }).click();
+  await mainWindow.getByRole("button", { name: "确认清除" }).click();
+  await expect(mainWindow.getByRole("status").filter({ hasText: "本地数据已清除" })).toBeVisible();
+  const cleared = await mainWindow.evaluate(async () => {
+    const api = (window as Window & { translator?: TranslatorApi }).translator!;
+    return { tasks: (await api.documents.list()).length, vocabulary: (await api.vocabulary.list()).length, session: await api.translation.getSession() };
+  });
+  expect(cleared).toMatchObject({ tasks: 0, vocabulary: 0 });
+  expect(cleared.session).toBeFalsy();
+  await mainWindow.getByRole("button", { name: "返回翻译" }).click();
+  await expect(mainWindow.getByRole("textbox", { name: "原文输入" })).toHaveValue("");
   await mainWindow.getByRole("button", { name: "历史记录" }).click();
   await expect(mainWindow.getByText("完成一次翻译后，记录会留在这里")).toBeVisible();
 });

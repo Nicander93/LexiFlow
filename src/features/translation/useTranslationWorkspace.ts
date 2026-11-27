@@ -1,5 +1,5 @@
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import type { DictionaryContextEvent, DictionaryLookupResult, NamingOptions, TargetLanguage, TranslationMode, TranslationProfile, TranslationSegment } from "../../../electron/shared/types";
+import { computed, nextTick, onActivated, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
+import type { DictionaryContextEvent, DictionaryLookupResult, NamingOptions, TargetLanguage, TranslationMode, TranslationProfile, TranslationSegment, WindowNavigation } from "../../../electron/shared/types";
 import { shouldLookupDictionary } from "../../../electron/shared/dictionary-eligibility";
 import { assembleDisplayText } from "../../../electron/shared/text-assembly";
 import { useCopyFeedback } from "../useCopyFeedback";
@@ -18,8 +18,11 @@ export function useTranslationWorkspace() {
   const { workbenchMode, setMode: setWorkbenchMode, restoredHistory } = useWorkbenchUi();
   const mode = ref<TranslationMode>("normal");
   const namingOptions = ref<NamingOptions>({ type: "variable", style: "camelCase", language: "general" });
-  const targetLanguage = ref<TargetLanguage>("zh-CN");
+  const targetLanguage = ref<TargetLanguage>("auto");
+  let defaultTargetLanguage: TargetLanguage = "auto";
   const { copied, markCopied } = useCopyFeedback();
+  const lastCopiedName = ref("");
+  const copiedName = computed(() => copied.value ? lastCopiedName.value : undefined);
   const translator = getTranslatorApi();
   let ocrTranslatePending = false;
   const maxInputLength = ref(10_000);
@@ -53,6 +56,9 @@ export function useTranslationWorkspace() {
   const { status: dictionaryStatus, result: autoDictionaryResult, lookup: lookupAutoDictionary, reset: resetAutoDictionary } = useDictionary(220);
   const resultView = ref<ResultView>("translation");
   const lastTranslatedSource = ref("");
+  const lastMode = ref<TranslationMode>("normal");
+  let draftSequence = 0;
+  const undoClear = shallowRef<() => void>();
   const lastTargetLanguage = ref<TargetLanguage>("zh-CN");
   const sourceDirty = computed(() => Boolean(lastTranslatedSource.value) && sourceText.value !== lastTranslatedSource.value);
   const translationDirty = computed(() => sourceDirty.value || (Boolean(lastTranslatedSource.value) && targetLanguage.value !== lastTargetLanguage.value));
@@ -141,6 +147,7 @@ export function useTranslationWorkspace() {
   }
 
   watch(sourceText, (value) => {
+    if (value) undoClear.value = undefined;
     if (lastTranslatedSource.value && value !== lastTranslatedSource.value) {
       if (isRunning.value) stop();
       clearSegmentLock();
@@ -199,6 +206,7 @@ export function useTranslationWorkspace() {
     resetAutoDictionary();
     resultView.value = "translation";
     mode.value = item.mode;
+    lastMode.value = item.mode;
     profileId.value = item.profileId ?? "general";
     targetLanguage.value = item.targetLanguage === "en" ? "en" : "zh-CN";
     lastTargetLanguage.value = targetLanguage.value;
@@ -222,7 +230,7 @@ export function useTranslationWorkspace() {
   }
 
   async function translate(): Promise<void> {
-    if (!sourceText.value.trim()) return;
+    if (!sourceText.value.trim() || isRunning.value) return;
     hoveredSegmentId.value = undefined;
     lockedSegmentId.value = undefined;
     clearRevisions();
@@ -231,25 +239,72 @@ export function useTranslationWorkspace() {
     closeDictionary();
     resultView.value = "translation";
     lastTranslatedSource.value = sourceText.value;
+    lastMode.value = mode.value;
     lastTargetLanguage.value = targetLanguage.value;
     await start({ text: sourceText.value, mode: mode.value, targetLanguage: mode.value === "naming" ? "en" : targetLanguage.value, profileId: profileId.value, namingOptions: mode.value === "naming" ? namingOptions.value : undefined, surface: "main" });
   }
 
   async function triggerAiTranslate(): Promise<void> {
     resultView.value = "translation";
-    if (!translationDirty.value && lastTranslatedSource.value === sourceText.value && (status.value === "success" || status.value === "streaming" || status.value === "loading")) return;
+    if (!translationDirty.value && lastMode.value === mode.value && lastTranslatedSource.value === sourceText.value && status.value === "success") return;
     await translate();
   }
 
   async function retry(): Promise<void> { await translate(); }
 
   function clearInput(): void {
+    draftSequence += 1;
+    const previousSource = sourceText.value;
+    const previousResult = status.value === "success" ? result.value : undefined;
+    const previousHistoryId = historyId.value;
+    const previousRevisions = revisions.value;
+    const previousTranslatedSource = lastTranslatedSource.value;
+    const previousTarget = lastTargetLanguage.value;
+    const previousMode = lastMode.value;
+    undoClear.value = () => {
+      undoClear.value = undefined;
+      sourceText.value = previousSource;
+      if (!previousResult) return;
+      lastTranslatedSource.value = previousTranslatedSource;
+      lastTargetLanguage.value = previousTarget;
+      lastMode.value = previousMode;
+      revisions.value = previousRevisions;
+      restore(previousResult, previousHistoryId);
+    };
     clearSegmentLock();
     closeDictionary();
     clearRevisions();
     reset();
     lastTranslatedSource.value = "";
     sourceText.value = "";
+  }
+
+  async function openDraft(draft: NonNullable<WindowNavigation["draft"]>): Promise<void> {
+    const sequence = ++draftSequence;
+    clearSegmentLock();
+    closeDictionary();
+    clearRevisions();
+    reset();
+    lastTranslatedSource.value = "";
+    sourceText.value = draft.text;
+    if (!draft.requestId) return;
+    try {
+      const session = await translator.translation.getSession();
+      if (sequence !== draftSequence || sourceText.value !== draft.text || status.value !== "idle") return;
+      if (session?.source !== "popup" || session.requestId !== draft.requestId || session.status !== "success") return;
+      resetAutoDictionary();
+      resultView.value = "translation";
+      profileId.value = session.profileId;
+      targetLanguage.value = session.targetLanguage;
+      lastTargetLanguage.value = session.targetLanguage;
+      lastTranslatedSource.value = draft.text;
+      lastMode.value = mode.value;
+      restore({
+        requestId: draft.requestId, sourceText: draft.text, targetText: session.resultText, segments: session.segments,
+        sourceLanguage: "", targetLanguage: session.targetLanguage, modelInfo: { provider: "ollama", model: "", durationMs: 0 },
+        createdAt: session.createdAt
+      }, session.historyId);
+    } catch { /* The draft is already open and can be translated in the workbench. */ }
   }
 
   async function switchResultView(view: ResultView): Promise<void> {
@@ -378,6 +433,7 @@ export function useTranslationWorkspace() {
   async function copyNamingCandidate(name: string): Promise<void> {
     if (!name.trim()) return;
     await translator.clipboard.writeText(name);
+    lastCopiedName.value = name;
     markCopied();
   }
 
@@ -385,7 +441,8 @@ export function useTranslationWorkspace() {
     void nextTick(resizeSourceTextarea);
     const settings = await translator.settings.get();
     maxInputLength.value = settings.translation.maxInputLength;
-    targetLanguage.value = settings.translation.targetLanguage;
+    if (targetLanguage.value === defaultTargetLanguage) targetLanguage.value = settings.translation.targetLanguage;
+    defaultTargetLanguage = settings.translation.targetLanguage;
     providerLabel.value = settings.provider.type === "ollama" ? "本地模型" : "远程模型";
     profiles.value = await translator.profiles.list();
     const quickSession = await translator.translation.getSession();
@@ -404,6 +461,17 @@ export function useTranslationWorkspace() {
       lastTranslatedSource.value = quickSession.sourceText;
       lastTargetLanguage.value = quickSession.targetLanguage;
     }
+  });
+
+  let hasActivated = false;
+  onActivated(async () => {
+    if (!hasActivated) { hasActivated = true; return; }
+    try {
+      const settings = await translator.settings.get();
+      maxInputLength.value = settings.translation.maxInputLength;
+      if (!sourceText.value && targetLanguage.value === defaultTargetLanguage) targetLanguage.value = settings.translation.targetLanguage;
+      defaultTargetLanguage = settings.translation.targetLanguage;
+    } catch { /* Keep the active workspace settings when refresh fails. */ }
   });
 
   function handleDictionaryContextEvent(event: DictionaryContextEvent): void {
@@ -432,9 +500,9 @@ export function useTranslationWorkspace() {
   return {
     PROFILE_SHORTCUTS, sourceText, mode, namingOptions, targetLanguage, profiles, profileId, providerLabel, selectProfileShortcut, onProfileChange,
     maxInputLength, showOriginalText, cleanupNotice, undoCleanupAndRetranslate, isRunning, triggerAiTranslate,
-    sourceDirty, translationDirty, clearInput, pendingRevision, applyRevision, discardSuggestion, lastInstruction, persistRevisions, copyDictionaryTerm,
+    sourceDirty, translationDirty, clearInput, undoClear, openDraft, lastMode, pendingRevision, applyRevision, discardSuggestion, lastInstruction, persistRevisions, copyDictionaryTerm,
     resultView, showDictionaryTab, showMainDictionary, switchResultView, autoDictionaryResult, dictionaryStatus, dictionaryEligible, dictionarySuggestions,
-    status, displayResultText, result, errorMessage, warningMessage, displaySegments, activeSegmentId, copied, copyResult, copySource, copyBilingual, copyNamingCandidate, stop, retry,
+    status, displayResultText, result, errorMessage, warningMessage, displaySegments, activeSegmentId, copied, copiedName, copyResult, copySource, copyBilingual, copyNamingCandidate, stop, retry,
     handleSegmentHover, toggleSegment, clearSegmentLock, navigateSegment, lookupDictionary,
     ocrResult, ocrError, ocrLoading, captureOcr, closeOcr, ocrImage, ocrSelectionStyle, selectingOcr, beginOcrSelection, moveOcrSelection, endOcrSelection, cancelOcrSelection, setOcrImage,
     dictionaryTerm, dictionaryCard, dictionaryLoading, dictionaryError, segmentDictionary, closeDictionary, dictionaryContext, dictionaryContextLoading, dictionaryContextText, dictionaryContextError, requestDictionaryContext, glossaryFromDictionary, glossaryFromDictionaryNotice, addDictionaryTermToGlossary,

@@ -185,6 +185,19 @@ export function parseRoute(value: unknown): string | undefined {
   return value;
 }
 
+export function parseWindowNavigation(value: unknown): import("../../shared/types").WindowNavigation {
+  if (value === undefined || typeof value === "string") return { route: parseRoute(value) ?? "/" };
+  const input = record(value, "导航请求");
+  const route = parseRoute(input.route) ?? "/";
+  if (input.draft === undefined) return { route };
+  if (route !== "/" && route !== "/?mode=naming") throw new IpcValidationError("工作台导航路径无效。");
+  const draft = record(input.draft, "工作台内容");
+  return {
+    route,
+    draft: { text: text(draft.text, "原文"), requestId: draft.requestId === undefined ? undefined : parseId(draft.requestId, "请求 ID") }
+  };
+}
+
 export function parseDocumentImportRequest(value: unknown): DocumentImportRequest {
   const input = record(value, "文档导入请求");
   return { profileId: parseId(input.profileId, "Profile ID") };

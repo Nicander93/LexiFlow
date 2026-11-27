@@ -23,6 +23,7 @@ import {
   type GlossaryImportResult,
   type GlossaryEntry,
   type PopupPayload,
+  type WindowNavigation,
   type ProviderHealth,
   type RuntimeInfo,
   type SegmentRevisionEvent,
@@ -159,14 +160,14 @@ const api = {
     writeText: (text: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.clipboardWrite, text)
   },
   window: {
-    openMain: (route?: string): void => ipcRenderer.send(IPC_CHANNELS.windowOpenMain, route),
+    openMain: (navigation?: string | WindowNavigation): void => ipcRenderer.send(IPC_CHANNELS.windowOpenMain, navigation),
     closePopup: (): void => ipcRenderer.send(IPC_CHANNELS.popupClose),
     pinPopup: (pinned: boolean): void => ipcRenderer.send(IPC_CHANNELS.popupPin, pinned),
     adaptPopupHeight: (kind?: "dictionary" | "translation" | "naming" | "default", contentHeight?: number): void =>
       ipcRenderer.send(IPC_CHANNELS.popupAdaptHeight, kind, contentHeight),
     onPopupPayload: (listener: (payload: PopupPayload) => void): (() => void) =>
       on(IPC_CHANNELS.popupPayload, listener),
-    onNavigate: (listener: (route: string) => void): (() => void) => on(IPC_CHANNELS.navigationOpen, listener)
+    onNavigate: (listener: (navigation: WindowNavigation) => void): (() => void) => on(IPC_CHANNELS.navigationOpen, listener)
   }
 } satisfies TranslatorApi;
 

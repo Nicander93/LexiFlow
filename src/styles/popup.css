@@ -1,11 +1,11 @@
-.popup-shell { min-height: 220px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); background: rgba(255,254,251,.97); }
+.popup-shell { min-height: 220px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
 .popup-header { height: 48px; flex: 0 0 48px; display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-bottom: 1px solid var(--border); background: rgba(250,248,243,.92); backdrop-filter: blur(20px); }
 .drag-region { -webkit-app-region: drag; }
 .no-drag, .no-drag * { -webkit-app-region: no-drag; }
 .popup-tabs { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-soft); }
 .popup-tabs button { min-height: 30px; padding: 5px 10px; font-size: 12px; }
 .popup-window-actions { display: flex; gap: 2px; }
-.popup-window-actions button { width: 32px; height: 30px; border: 0; border-radius: 8px; color: var(--ink-soft); background: transparent; font-size: 17px; transition: .18s ease; }
+.popup-window-actions button { width: 32px; height: 30px; border: 0; border-radius: 8px; color: var(--ink-soft); background: transparent; font-size: 17px; transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease); }
 .popup-window-actions button:hover { color: var(--accent); background: var(--accent-soft); }
 .popup-source { max-height: 112px; overflow: auto; flex-shrink: 0; border-bottom: 1px solid var(--border); background: rgba(250,248,243,.72); }
 .source-toggle { width: 100%; display: flex; justify-content: space-between; padding: 9px 13px; border: 0; color: var(--muted); background: transparent; font-size: 12px; }
@@ -22,7 +22,7 @@
 .popup-error { margin: 12px; padding: 12px; border-radius: 10px; font-size: 12px; }
 .popup-warning { margin: 8px 12px 0; padding: 10px 12px; border-radius: 10px; font-size: 12px; }
 .popup-candidates { display: grid; gap: 7px; padding: 10px; }
-.popup-candidates button { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; text-align: left; background: rgba(255,255,255,.88); transition: .18s ease; }
+.popup-candidates button { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; text-align: left; background: var(--surface-soft); transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease); }
 .popup-candidates button:hover { border-color: rgba(95,154,108,.34); background: var(--accent-faint); transform: translateY(-1px); }
 .popup-candidates code { font-weight: 700; }
 .popup-candidates small { color: var(--muted); }

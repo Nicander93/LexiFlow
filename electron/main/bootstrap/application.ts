@@ -178,6 +178,7 @@ export async function bootstrapApplication(): Promise<void> {
   let settingsUseCases: SettingsUseCases;
   const clearLocalData = async (): Promise<void> => {
     translationManager.cancel();
+    translationSessionStore.clear();
     await documentManager.cancelAll();
     await Promise.all([historyStore.clear(), glossaryStore.clear(), profileStore.clear(), documentStore.clear(), vocabularyStore.clear()]);
     await settingsUseCases.reset();

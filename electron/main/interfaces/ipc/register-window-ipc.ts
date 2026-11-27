@@ -1,15 +1,15 @@
 import { IPC_CHANNELS } from "../../../shared/types";
-import { parseBoolean, parseRoute, parseString } from "../../ipc/validation";
+import { parseBoolean, parseString, parseWindowNavigation } from "../../ipc/validation";
 import { registerInvoke, registerOn } from "./helpers";
 import type { IpcDependencies } from "./types";
 
 export function registerWindowIpc(dependencies: IpcDependencies): void {
   const { windowManager, translationManager } = dependencies;
   registerInvoke(IPC_CHANNELS.clipboardWrite, (_event, text: string) => dependencies.clipboardWrite(parseString(text, "剪贴板内容", 100_000)));
-  registerOn(IPC_CHANNELS.windowOpenMain, (_event, route?: string) => {
+  registerOn(IPC_CHANNELS.windowOpenMain, (_event, input: unknown) => {
+    const { route, draft } = parseWindowNavigation(input);
     void (async () => {
-      const mainWindow = await windowManager.showMainWindow(parseRoute(route));
-      translationManager.pushActiveSession(mainWindow.webContents);
+      await windowManager.showMainWindow(route, draft);
       if (!windowManager.isPopupPinned()) {
         translationManager.cancelLane("popup-translation");
         windowManager.hidePopup();

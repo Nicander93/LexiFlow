@@ -31,7 +31,7 @@
   background: linear-gradient(145deg, #3d936b, #287452);
   box-shadow: 0 3px 9px rgba(20, 55, 41, .28), inset 0 1px rgba(255, 255, 255, .2);
   cursor: pointer;
-  transition: filter .15s ease, transform .15s ease;
+  transition: filter var(--motion-control) var(--motion-ease), transform var(--motion-control) var(--motion-ease);
 }
 .selection-tip:hover {
   filter: brightness(1.08);

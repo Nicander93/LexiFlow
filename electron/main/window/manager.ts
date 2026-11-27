@@ -1,7 +1,7 @@
-import { app, BrowserWindow, screen } from "electron";
+import { app, BrowserWindow, nativeTheme, screen } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { IPC_CHANNELS, type PopupPayload } from "../../shared/types";
+import { IPC_CHANNELS, type PopupPayload, type WindowNavigation } from "../../shared/types";
 import { configureNavigationSecurity } from "../ipc/security";
 import { PopupBoundsPersistence } from "./popup-bounds-persistence";
 
@@ -75,6 +75,11 @@ export class WindowManager {
 
   async createMainWindow(): Promise<BrowserWindow> {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) return this.mainWindow;
+    const titleBar = () => ({
+      color: nativeTheme.shouldUseDarkColors ? "#232823" : "#ffffff",
+      symbolColor: nativeTheme.shouldUseDarkColors ? "#edf1e9" : "#555a54",
+      height: 42
+    });
     const window = this.createWindow({
       width: 760,
       height: 540,
@@ -83,10 +88,13 @@ export class WindowManager {
       show: false,
       title: "LexiFlow",
       titleBarStyle: "hidden",
-      titleBarOverlay: { color: "#fffefb", symbolColor: "#555a54", height: 42 },
+      titleBarOverlay: titleBar(),
+      backgroundColor: titleBar().color,
       icon: join(moduleDirectory, "../../build/icon.ico")
     });
     this.mainWindow = window;
+    const updateTitleBar = (): void => window.setTitleBarOverlay(titleBar());
+    nativeTheme.on("updated", updateTitleBar);
     window.once("ready-to-show", () => window.show());
     window.on("close", (event) => {
       if (this.isQuitting) return;
@@ -99,15 +107,16 @@ export class WindowManager {
       app.quit();
     });
     window.on("closed", () => {
+      nativeTheme.off("updated", updateTitleBar);
       this.mainWindow = null;
     });
     await this.loadRenderer(window);
     return window;
   }
 
-  async showMainWindow(route?: string): Promise<BrowserWindow> {
+  async showMainWindow(route?: string, draft?: WindowNavigation["draft"]): Promise<BrowserWindow> {
     const window = await this.createMainWindow();
-    if (route !== undefined) window.webContents.send(IPC_CHANNELS.navigationOpen, route);
+    if (route !== undefined) window.webContents.send(IPC_CHANNELS.navigationOpen, { route, draft } satisfies WindowNavigation);
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
@@ -156,6 +165,7 @@ export class WindowManager {
       show: false,
       frame: false,
       transparent: false,
+      backgroundColor: nativeTheme.shouldUseDarkColors ? "#232823" : "#ffffff",
       resizable: true,
       alwaysOnTop: true,
       skipTaskbar: true,

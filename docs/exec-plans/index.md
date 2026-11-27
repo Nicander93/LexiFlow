@@ -10,6 +10,7 @@
 
 ## 最近完成
 
+- [使用流程与状态变化](completed/interaction-and-motion.md)：工作台草稿与撤销、文档和单词本操作、统一动效与宽窄窗口验收。
 - [划词 Logo 与系统快捷键修复](completed/selection-logo-shortcuts.md)：统一悬浮提示尺寸，快捷键冲突保留可用项，提供运行状态，修复清空与默认重置。
 - [应用内选区翻译与中英交互](completed/internal-selection-translation.md)：排除内部系统划词，统一输入/正文选区翻译，仅英文提供词典，选区结果独立于全文与历史。
 - [翻译工作台交互修正](completed/workbench-interaction.md)：明确查词与句旁调整，重译先对比再替换，保留原文草稿对应的旧译文，支持布局切换与历史撤销。

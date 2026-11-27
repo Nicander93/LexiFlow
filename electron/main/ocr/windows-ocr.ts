@@ -47,7 +47,8 @@ $lines = @($result.Lines | ForEach-Object {
   $bottom = ($words | ForEach-Object { [double]$_.BoundingRect.Y + [double]$_.BoundingRect.Height } | Measure-Object -Maximum).Maximum
   [pscustomobject]@{ text = $_.Text; x = $left; y = $top; width = ($right - $left); height = ($bottom - $top) }
 })
-[pscustomobject]@{ text = $result.Text; blocks = $lines } | ConvertTo-Json -Compress -Depth 4
+$json = [pscustomobject]@{ text = $result.Text; blocks = $lines } | ConvertTo-Json -Compress -Depth 4
+[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
 `;
 
 interface EngineResult { text: string; blocks: OcrBlock[]; }
@@ -63,7 +64,8 @@ export class WindowsOcrEngine {
         signal,
         env: { ...process.env, LEXIFLOW_OCR_IMAGE_PATH: imagePath }
       });
-      const value = JSON.parse(stdout) as { text?: string; blocks?: Array<{ text?: string; x?: number; y?: number; width?: number; height?: number }> };
+      const json = Buffer.from(stdout.trim(), "base64").toString("utf8");
+      const value = JSON.parse(json) as { text?: string; blocks?: Array<{ text?: string; x?: number; y?: number; width?: number; height?: number }> };
       const blocks = (value.blocks ?? []).filter((block) => typeof block.text === "string" && block.text.trim()).map((block, index) => ({
         id: `ocr-${randomUUID()}-${index + 1}`,
         text: block.text!,
@@ -71,9 +73,9 @@ export class WindowsOcrEngine {
       }));
       return { text: value.text?.trim() || blocks.map((block) => block.text).join("\n"), blocks };
     } catch (error) {
-      if (signal.aborted || (error as NodeJS.ErrnoException).code === "ETIMEDOUT") throw new OcrError("OCR_TIMEOUT", "OCR 识别已取消或超时。");
-      const message = `${(error as Error).message ?? error}`;
-      if (message.includes("OCR_LANGUAGE_PACK_MISSING") || message.includes("language pack")) throw new OcrError("OCR_LANGUAGE_PACK_MISSING", "Windows OCR 语言包不可用。");
+      const failure = error as NodeJS.ErrnoException & { killed?: boolean; stderr?: string };
+      if (signal.aborted || failure.killed || failure.code === "ETIMEDOUT") throw new OcrError("OCR_TIMEOUT", "OCR 识别已取消或超时。");
+      if (failure.stderr?.includes("OCR_LANGUAGE_PACK_MISSING")) throw new OcrError("OCR_LANGUAGE_PACK_MISSING", "Windows OCR 语言包不可用。");
       throw new OcrError("OCR_ENGINE_FAILED", "Windows OCR 引擎执行失败。");
     }
   }

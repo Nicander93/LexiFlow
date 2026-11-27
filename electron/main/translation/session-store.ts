@@ -5,6 +5,7 @@ export class TranslationSessionStore {
   private active: TranslationSession | undefined;
 
   getActive(): TranslationSession | undefined { return this.active && structuredClone(this.active); }
+  clear(): void { this.active = undefined; }
   create(input: Omit<TranslationSession, "id" | "createdAt" | "updatedAt">): TranslationSession {
     const now = Date.now();
     this.active = { ...input, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
